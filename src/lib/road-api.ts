@@ -7,7 +7,7 @@ export async function fetchRoadTravelData(
   apiKey: string
 ): Promise<Record<string, any>> {
   console.log(`Fetching road travel for ${origins} to ${destinations}`);
-  console.log(`Debug API key: [${apiKey}] (length: ${apiKey.length})`);
+  console.log(`Google Maps API key configured (length: ${apiKey.length})`);
   const response = await axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
     params: {
       origins,

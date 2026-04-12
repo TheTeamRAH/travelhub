@@ -183,6 +183,9 @@ git clone <your-repo-url> travel-hub
 cd travel-hub
 
 # Export any API environment variables
+export NATIONAL_RAIL_TOKEN=...
+export NATIONAL_RAIL_KB_TOKEN=...
+export GOOGLE_MAPS_API_KEY=...
 
 # Set up journey configurations
 cp config/roads.example.yaml config/roads.yaml
@@ -194,6 +197,8 @@ docker compose up --build -d
 ```
 
 The application will be available at **http://localhost:3000**.
+
+On remote hosts, those variables must exist in the environment used to run `docker compose`. If they are missing there, the container will still start but the app will not use the live APIs for the affected features.
 
 ### Stop the Application
 
