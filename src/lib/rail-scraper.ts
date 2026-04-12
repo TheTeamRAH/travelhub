@@ -1,5 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
+import { EngineeringWork } from "./rail-engineering";
 
 // --- Rail Scraping Fallback ---
 export async function scrapeRailDepartures(crs: string, destination?: string, destCrs?: string) {
@@ -161,8 +162,31 @@ function parseNreRichText(node: any): string {
 }
 
 export async function scrapeEngineeringWorks(operators: string[] = ['LE']) {
-  const allDisruptions: string[] = [];
+  const allDisruptions: EngineeringWork[] = [];
   const seenSlugs = new Set<string>();
+
+  const parseRichTextValue = (value: any): string => {
+    if (!value) return "";
+    if (value.json) return parseNreRichText(value.json).trim();
+    if (typeof value === "string") return value.trim();
+    return parseNreRichText(value).trim();
+  };
+
+  const normaliseOperators = (item: any): { code?: string; name: string }[] => {
+    const candidates = item?.trainOperatorsAffected || item?.operatorsAffected || item?.operators || item?.trainOperators || [];
+    const list = Array.isArray(candidates) ? candidates : [candidates];
+
+    return list.map((operator: any) => {
+      if (typeof operator === "string") {
+        return { name: operator.trim() };
+      }
+
+      return {
+        code: operator?.code || operator?.operatorCode || operator?.tocCode,
+        name: (operator?.name || operator?.operatorName || operator?.title || operator?.code || "").trim(),
+      };
+    }).filter(operator => operator.name);
+  };
 
   for (const code of operators) {
     try {
@@ -187,23 +211,34 @@ export async function scrapeEngineeringWorks(operators: string[] = ['LE']) {
         continue;
       }
 
-      const unplanned = disruptionsData.unplannedIncidents || [];
       const planned = disruptionsData.engineeringWorks || [];
-      const plannedInc = disruptionsData.plannedIncidents || [];
 
-      [...unplanned, ...planned, ...plannedInc].forEach((item: any) => {
+      planned.forEach((item: any) => {
         if (item.slug && !seenSlugs.has(item.slug)) {
           seenSlugs.add(item.slug);
 
-          let summary = "";
-          if (item.summary?.json) {
-            summary = parseNreRichText(item.summary.json).trim();
-          } else if (item.summary) {
-            summary = item.summary.toString().trim();
-          }
+          const summary = parseRichTextValue(item.summary || item.title || item.heading);
+          const description = parseRichTextValue(item.description || item.body || item.details);
+          const routesAffected = parseRichTextValue(
+            item.routesAffected || item.routeAffected || item.affectedRoutes || item.routeDescription
+          );
+          const infoUrl = item.url || item.href || (item.slug ? `https://www.nationalrail.co.uk/engineering-works/${item.slug}/` : undefined);
 
           if (summary && summary.length > 10) {
-            allDisruptions.push(summary);
+            allDisruptions.push({
+              id: item.slug || item.id || summary,
+              source: "scraping",
+              summary,
+              description,
+              routesAffected,
+              startsAt: item.startDate || item.startDateTime || item.validFrom,
+              endsAt: item.endDate || item.endDateTime || item.validTo,
+              planned: true,
+              operatorsAffected: normaliseOperators(item),
+              infoUrl,
+              impactedJourneys: [],
+              uncertainJourneys: [],
+            });
           }
         }
       });
@@ -212,9 +247,5 @@ export async function scrapeEngineeringWorks(operators: string[] = ['LE']) {
     }
   }
 
-  if (allDisruptions.length > 0) {
-    return allDisruptions.slice(0, 5);
-  }
-
-  return ["No major service disruptions reported on the network today."];
+  return allDisruptions.slice(0, 8);
 }

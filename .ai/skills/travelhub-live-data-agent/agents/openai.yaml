@@ -1,0 +1,7 @@
+interface:
+  display_name: "Travelhub Live Data"
+  short_description: "Maintain live rail and road data flows"
+  default_prompt: "Use $travelhub-live-data-agent to diagnose or update Travelhub live rail or road data behavior."
+
+policy:
+  allow_implicit_invocation: true

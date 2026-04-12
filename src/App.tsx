@@ -61,7 +61,27 @@ interface RoadJourney {
 interface RailConfig {
   homeStation: { name: string; crs: string };
   operatorCodes: string[];
-  destinations: { id: string; name: string }[];
+  destinations: { id: string; name: string; crs: string }[];
+  walkTimeMins?: number;
+}
+
+interface EngineeringJourneyMatch {
+  journeyId: string;
+  journeyName: string;
+  reasons: string[];
+}
+
+interface EngineeringWork {
+  id: string;
+  source: "api" | "scraping";
+  summary: string;
+  description: string;
+  routesAffected: string;
+  startsAt?: string;
+  endsAt?: string;
+  infoUrl?: string;
+  impactedJourneys: EngineeringJourneyMatch[];
+  uncertainJourneys: EngineeringJourneyMatch[];
 }
 
 
@@ -73,7 +93,7 @@ export default function App() {
   const [railData, setRailData] = useState<Record<string, TravelDeparture[]>>({});
   const [railDataSource, setRailDataSource] = useState<"api" | "scraping">("scraping");
   const [roadData, setRoadData] = useState<Record<string, { travelTime: string, trafficStatus: string, distance: string, summary: string }>>({});
-  const [engineeringWorks, setEngineeringWorks] = useState<string[]>([]);
+  const [engineeringWorks, setEngineeringWorks] = useState<EngineeringWork[]>([]);
   const [showToast, setShowToast] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [railLastUpdated, setRailLastUpdated] = useState<Date | null>(null);
@@ -675,14 +695,53 @@ export default function App() {
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3">
             <AlertCircle className="text-amber-500 shrink-0" size={20} />
             <div className="space-y-1">
-              <p className="text-sm font-bold text-amber-900">Planned Engineering Works</p>
+                <p className="text-sm font-bold text-amber-900">Planned Engineering Works</p>
               <div className="text-sm text-amber-800 leading-relaxed space-y-2">
                 {engineeringWorks.length > 0 ? (
-                  engineeringWorks.map((work, i) => (
-                    <p key={i}>{work}</p>
+                  engineeringWorks.map((work) => (
+                    <div key={work.id} className="rounded-lg border border-amber-200 bg-white/60 p-3 space-y-2">
+                      <p className="font-semibold text-amber-950">{work.summary}</p>
+                      {work.routesAffected && (
+                        <p><span className="font-semibold">Route:</span> {work.routesAffected}</p>
+                      )}
+                      {(work.startsAt || work.endsAt) && (
+                        <p>
+                          <span className="font-semibold">When:</span>{" "}
+                          {work.startsAt ? format(new Date(work.startsAt), "EEE d MMM HH:mm") : "Unknown"}
+                          {" - "}
+                          {work.endsAt ? format(new Date(work.endsAt), "EEE d MMM HH:mm") : "Until further notice"}
+                        </p>
+                      )}
+                      {work.impactedJourneys.length > 0 ? (
+                        <p>
+                          <span className="font-semibold">Configured journeys impacted:</span>{" "}
+                          {work.impactedJourneys.map(match => match.journeyName).join(", ")}
+                        </p>
+                      ) : work.uncertainJourneys.length > 0 ? (
+                        <p>
+                          <span className="font-semibold">Possible impact:</span>{" "}
+                          {work.uncertainJourneys.map(match => match.journeyName).join(", ")}
+                        </p>
+                      ) : (
+                        <p><span className="font-semibold">Configured journeys impacted:</span> none matched confidently</p>
+                      )}
+                      {work.description && (
+                        <p>{work.description}</p>
+                      )}
+                      {work.infoUrl && (
+                        <a
+                          href={work.infoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-amber-900 underline underline-offset-2"
+                        >
+                          View incident details <ArrowRight size={14} />
+                        </a>
+                      )}
+                    </div>
                   ))
                 ) : (
-                  <p>No major engineering works reported for today. Check back later for weekend updates.</p>
+                  <p>No planned engineering works currently match your configured rail journeys.</p>
                 )}
               </div>
             </div>
