@@ -20,8 +20,8 @@ Live rail departures are provided by National Rail when a token is provided via 
 
 | Feature | Detail |
 |---|---|
-| 🚂 **Live Rail Departures** | Real-time train times from the National Rail [Rail Data Marketplace](https://raildata.org.uk) JSON API, grouped per destination. Shows best-arriving and next train, ETA, platform, status, and calling points. Falls back to web scraping if no API token is set |
-| 🚗 **Live Road Travel** | Google Maps Distance Matrix API — live travel time and traffic status per route in miles |
+| 🚂 **Live Rail Departures** | Real-time train times from the National Rail [Rail Data Marketplace](https://raildata.org.uk) JSON API, grouped per destination. Shows best-arriving and next train, ETA, platform, status, and calling points. The rail header source label reflects whether departures and engineering works are using the API or scraping |
+| 🚗 **Live Road Travel** | Google Maps Distance Matrix API — live travel time and traffic status per route in miles. When the API key is absent, route cards and Google Maps embeds still render from your configured journeys, but live traffic remains unavailable |
 | 🛠️ **Engineering Works** | Planned disruptions only when they match one of your configured rail journeys, including likely intermediate stations inferred from live departures. Uses the National Rail Knowledgebase Incidents feed when available, otherwise falls back to National Rail website scraping |
 | 📱 **Send to Device** | QR code modal + copy-link button to easily open a route on your phone |
 | 🗺️ **Embedded Maps** | Google Maps embedded per route with single-click full-screen expansion |
@@ -88,6 +88,7 @@ The heart of the application. Contains:
 - All React state (`useState`, `useEffect`, `useRef`) for rail data, road data, loading flags, timestamps, and UI state
 - Data fetching on mount and auto-refresh timers (using refs to avoid stale closures)
 - Rail card UI — best/next departure logic, expandable train list with calling points
+- Unified rail source indicator in the departures header, including engineering-works fallback state
 - Road card UI — embedded maps, full-screen overlay, traffic status
 - QR code share modal
 - Footer with per-source last-updated timestamps
@@ -108,7 +109,7 @@ Contains the core backend logic for data fetching, used by `server.ts`:
 #### `server.ts`
 Express server that acts as a secure backend proxy. It delegates the heavy lifting to the modules in `src/lib/`:
 - **`GET /api/rail/departures`**: Uses `fetchRailApiDepartures` (from `rail-api.ts`) if a token is provided; otherwise, falls back to `scrapeRailDepartures` (from `rail-scraper.ts`).
-- **`GET /api/rail/engineering`**: Uses `fetchKnowledgebaseEngineeringWorks` (from `rail-engineering-api.ts`) when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise falls back to `scrapeEngineeringWorks` (from `rail-scraper.ts`). The route returns structured incidents and includes configured-journey impact matching.
+- **`GET /api/rail/engineering`**: Uses `fetchKnowledgebaseEngineeringWorks` (from `rail-engineering-api.ts`) when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise falls back to `scrapeEngineeringWorks` (from `rail-scraper.ts`). The route returns structured incidents and includes configured-journey impact matching. Route-hint enrichment is only taken from the official departures API when `NATIONAL_RAIL_TOKEN` is configured, so scraper fallback does not broaden engineering matches across unrelated journeys.
 - **`GET /api/road/travel`**: Uses `fetchRoadTravelData` from `road-api.ts`.
 - **Configuration Routes**: Serves the rail and road journey configurations from the `config/` directory.
 
@@ -166,7 +167,7 @@ destinations:
 | `NATIONAL_RAIL_KB_BASE_URL` | Optional | Override for the Knowledgebase incidents feed base URL. Defaults to `https://opendata.nationalrail.co.uk/api/staticfeeds` |
 | `GOOGLE_MAPS_API_KEY` | Optional | A Google Cloud API key with the **Distance Matrix API** enabled. If not set, road travel data is unavailable but the app still works |
 
-> **Note:** The application works fully without any keys. Rail departures and engineering works both fall back to scraping when their respective National Rail credentials are absent. Road travel shows a clear "API key not configured" message when the Google Maps key is absent.
+> **Note:** The application works fully without any keys. Rail departures and engineering works both fall back to scraping when their respective National Rail credentials are absent. Road journey cards and Google Maps embeds still render from config when the Google Maps key is absent, but live traffic shows a clear "API key not configured" message.
 
 ---
 
