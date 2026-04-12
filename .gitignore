@@ -10,3 +10,4 @@ dev_scratchpad/
 config/*.yaml
 !config/roads.example.yaml
 !config/rail.example.yaml
+.idea/
