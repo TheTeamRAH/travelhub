@@ -48,7 +48,7 @@ export async function getLiveRoadTravel(journeys: { id: string, origin: string, 
   }
 }
 
-export async function getLiveRailDepartures(origin: string, destinations: { name: string, crs: string }[]): Promise<Record<string, TrainDeparture[]>> {
+export async function getLiveRailDepartures(origin: string, destinations: { name: string, crs: string }[]): Promise<{ source: 'api' | 'scraping', data: Record<string, TrainDeparture[]> }> {
   try {
     // We'll make one call to get all departures from the origin
     const response = await axios.get("/api/rail/departures", {
@@ -60,6 +60,7 @@ export async function getLiveRailDepartures(origin: string, destinations: { name
     });
 
     const data = response.data.departures;
+    const source = response.data.source || 'scraping';
 
     // The backend now returns an object grouped by destination query
     if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -69,11 +70,11 @@ export async function getLiveRailDepartures(origin: string, destinations: { name
         const cleanKey = Object.keys(data).find(k => k.toLowerCase() === dest.name.toLowerCase());
         results[dest.name] = cleanKey ? data[cleanKey] : [];
       });
-      return results;
+      return { source, data: results };
     }
 
     // Fallback: This shouldn't happen with the new REST API but kept for safety
-    return {};
+    return { source: 'scraping', data: {} };
   } catch (error) {
     console.error("Error fetching live rail data from backend:", error);
     throw error;
