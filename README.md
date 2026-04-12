@@ -38,6 +38,10 @@ travel-hub/
 │   ├── App.tsx                  # Main React application — all UI, state, and data logic
 │   ├── main.tsx                 # React entry point — mounts App into the DOM
 │   ├── index.css                # Global styles and Tailwind CSS configuration
+│   ├── lib/                     # Core logic modules (Rail API, Road API, Scrapers)
+│   │   ├── rail-api.ts          # National Rail Data Marketplace client
+│   │   ├── rail-scraper.ts      # Web scraping fallback and engineering works
+│   │   └── road-api.ts          # Google Maps Distance Matrix client
 │   └── services/
 │       └── travelService.ts     # Client-side API helpers (calls to /api/road and /api/rail endpoints)
 │
@@ -82,11 +86,18 @@ Thin HTTP client layer (using `axios`) that calls the Express backend:
 - `getLiveRailDepartures(crs, destinations)` — fetches grouped departures from `/api/rail/departures`
 - `getLiveRoadTravel(journeys)` — fetches travel times from `/api/road/travel`
 
+#### `src/lib/`
+Contains the core backend logic for data fetching, used by `server.ts`:
+- **`rail-api.ts`**: Handles the official National Rail Data Marketplace (RDM) REST API integration.
+- **`rail-scraper.ts`**: Provides a robust fallback by scraping the National Rail website when no API token is present. Also handles scraping for engineering works.
+- **`road-api.ts`**: Encapsulates the logic for querying the Google Maps Distance Matrix API.
+
 #### `server.ts`
-Express server that acts as a secure backend proxy. Handles:
-- **`GET /api/rail/departures`** — Fetches live departures primarily from the National Rail [Rail Data Marketplace](https://raildata.org.uk) **JSON API** (`api1.raildata.org.uk`) using `NATIONAL_RAIL_TOKEN`. Falls back to scraping `nationalrail.co.uk` via `cheerio` if no token is set. The API queries each destination's arrival board filtered by the origin station for accurate results
-- **`GET /api/rail/engineering`** — Scrapes planned disruptions for your configured train operator(s)
-- **`GET /api/road/travel`** — Proxy to the Google Maps Distance Matrix API. Returns travel time, distance (miles), and a derived traffic status. Returns a `_configRequired` flag (rather than an error) if no API key is set, so the UI can degrade gracefully
+Express server that acts as a secure backend proxy. It delegates the heavy lifting to the modules in `src/lib/`:
+- **`GET /api/rail/departures`**: Uses `fetchRailApiDepartures` (from `rail-api.ts`) if a token is provided; otherwise, falls back to `scrapeRailDepartures` (from `rail-scraper.ts`).
+- **`GET /api/rail/engineering`**: Uses `scrapeEngineeringWorks` from `rail-scraper.ts`.
+- **`GET /api/road/travel`**: Uses `fetchRoadTravelData` from `road-api.ts`.
+- **Configuration Routes**: Serves the rail and road journey configurations from the `config/` directory.
 
 #### `vite.config.ts`
 Configures the Vite dev and build pipeline:
