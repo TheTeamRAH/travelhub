@@ -1,4 +1,4 @@
-import { outboundHttpClient } from "./http-client";
+import axios from "axios";
 
 export async function fetchRoadTravelData(
   origins: string,
@@ -8,7 +8,7 @@ export async function fetchRoadTravelData(
 ): Promise<Record<string, any>> {
   console.log(`Fetching road travel for ${origins} to ${destinations}`);
   console.log(`Google Maps API key configured (length: ${apiKey.length})`);
-  const response = await outboundHttpClient.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
+  const response = await axios.get("https://maps.googleapis.com/maps/api/distancematrix/json", {
     params: {
       origins,
       destinations,

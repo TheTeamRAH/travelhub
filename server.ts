@@ -11,7 +11,6 @@ import { fetchRailApiDepartures } from "./src/lib/rail-api";
 import { fetchRoadTravelData } from "./src/lib/road-api";
 import { attachJourneyImpacts, RailJourneyReference } from "./src/lib/rail-engineering";
 import { fetchKnowledgebaseEngineeringWorks } from "./src/lib/rail-engineering-api";
-import { describeRequestError } from "./src/lib/http-client";
 
 
 const app = express();
@@ -112,7 +111,7 @@ app.get("/api/rail/departures", async (req, res) => {
       const results = await fetchRailApiDepartures(crs, destinations, destCrsList, token);
       return res.json({ source: "api", departures: results });
     } catch (error: any) {
-      console.error("Official REST Rail API failed:", describeRequestError(error));
+      console.error("Official REST Rail API failed:", error.message);
       return res.status(502).json({ error: "Failed to fetch from National Rail Data API. No scraping fallback permitted." });
     }
   }
@@ -264,8 +263,7 @@ app.get("/api/road/travel", async (req, res) => {
     );
     res.json(results);
   } catch (error: any) {
-    console.error("Google Maps Distance Matrix failed:", describeRequestError(error));
-    res.json({ _error: describeRequestError(error) || "Failed to fetch road data" });
+    res.json({ _error: error.message || "Failed to fetch road data" });
   }
 });
 

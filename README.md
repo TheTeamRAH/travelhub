@@ -200,8 +200,6 @@ The application will be available at **http://localhost:3000**.
 
 On remote hosts, those variables must exist in the environment used to run `docker compose`. If they are missing there, the container will still start but the app will not use the live APIs for the affected features.
 
-For container hosts with partial or broken IPv6 connectivity, the backend now prefers IPv4 for outbound National Rail and Google Maps API requests. This avoids remote-only failures where DNS returns IPv6 addresses but the container cannot route them.
-
 ### Stop the Application
 
 ```bash
