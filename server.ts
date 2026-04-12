@@ -107,8 +107,8 @@ async function scrapeRailDepartures(crs: string, destination?: string, destCrs?:
       const actualDestArrivalInfo = s.arrivalInfo || {};
       const arrivalAtDest = s.journeyDetails?.arrivalInfo || actualDestArrivalInfo;
 
-      let departureTime = depInfo.scheduled ? new Date(depInfo.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : "N/A";
-      let eta = arrivalAtDest.scheduled ? new Date(arrivalAtDest.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : "N/A";
+      let departureTime = depInfo.scheduled ? new Date(depInfo.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) : "N/A";
+      let eta = arrivalAtDest.scheduled ? new Date(arrivalAtDest.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) : "N/A";
       let duration = 0;
       let status = "Unknown";
       let stops: string[] = [];
