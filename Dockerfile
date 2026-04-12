@@ -23,6 +23,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./
 COPY --from=builder /app/tsconfig.json ./
 COPY --from=builder /app/config ./config
+COPY --from=builder /app/src ./src
 
 # Expose the application port
 EXPOSE 3000

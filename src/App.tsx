@@ -71,6 +71,7 @@ export default function App() {
   const [expandedRoadCardId, setExpandedRoadCardId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [railData, setRailData] = useState<Record<string, TravelDeparture[]>>({});
+  const [railDataSource, setRailDataSource] = useState<"api" | "scraping">("scraping");
   const [roadData, setRoadData] = useState<Record<string, { travelTime: string, trafficStatus: string, distance: string, summary: string }>>({});
   const [engineeringWorks, setEngineeringWorks] = useState<string[]>([]);
   const [showToast, setShowToast] = useState<string | null>(null);
@@ -125,9 +126,10 @@ export default function App() {
           const mappedRail: Record<string, TravelDeparture[]> = {};
           initialRailConfig.destinations.forEach((dest: any) => {
             // The travelService now returns exact keys matching dest.name
-            mappedRail[dest.id] = liveRail[dest.name] || [];
+            mappedRail[dest.id] = liveRail.data[dest.name] || [];
           });
           setRailData(mappedRail);
+          setRailDataSource(liveRail.source);
           setRailLastUpdated(new Date());
 
           // Fetch Engineering Works
@@ -207,11 +209,12 @@ export default function App() {
 
       const mappedRail: Record<string, TravelDeparture[]> = {};
       railConfig.destinations.forEach(dest => {
-        const key = Object.keys(liveRail).find(k => k === dest.name) ||
-          Object.keys(liveRail).find(k => k.toLowerCase().includes(dest.name.toLowerCase().split(' ')[0]));
-        mappedRail[dest.id] = key ? liveRail[key] : [];
+        const key = Object.keys(liveRail.data).find(k => k === dest.name) ||
+          Object.keys(liveRail.data).find(k => k.toLowerCase().includes(dest.name.toLowerCase().split(' ')[0]));
+        mappedRail[dest.id] = key ? liveRail.data[key] : [];
       });
       setRailData(mappedRail);
+      setRailDataSource(liveRail.source);
       setRailLastUpdated(new Date());
 
       const params = new URLSearchParams({ crs: railConfig.homeStation.crs });
@@ -639,11 +642,35 @@ export default function App() {
                 <RefreshCw size={18} className={cn("text-slate-500", isRailRefreshing && "animate-spin")} />
               </button>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                Source: National Rail Live {railConfig && `(>${railConfig.walkTimeMins || 10}m walk)`}
+                <span className={cn("w-1.5 h-1.5 rounded-full", railDataSource === 'api' ? "bg-emerald-500" : "bg-amber-500")}></span>
+                Source: {railDataSource === 'api' ? 'Official REST API' : 'Web Scraping'}
               </div>
             </div>
           </div>
+
+          {railDataSource === 'scraping' && (
+            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3">
+              <Info className="text-blue-500 shrink-0" size={20} />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-blue-900">Data Source Notice</p>
+                <p className="text-sm text-blue-800 leading-relaxed">
+                  Currently using Web Scraping for live departures because the official REST API token is not configured.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {railDataSource === 'api' && (
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex gap-3">
+              <Info className="text-emerald-500 shrink-0" size={20} />
+              <div className="space-y-1">
+                <p className="text-sm font-bold text-emerald-900">Data Source Notice</p>
+                <p className="text-sm text-emerald-800 leading-relaxed">
+                  Using National Rail Official REST API.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3">
             <AlertCircle className="text-amber-500 shrink-0" size={20} />
