@@ -1,6 +1,6 @@
-import axios from "axios";
 import { XMLParser } from "fast-xml-parser";
 import { EngineeringWork, stripMarkup } from "./rail-engineering";
+import { outboundHttpClient } from "./http-client";
 
 function asArray<T>(value: T | T[] | undefined | null): T[] {
   if (!value) return [];
@@ -22,7 +22,7 @@ export async function fetchKnowledgebaseEngineeringWorks(token: string): Promise
   const baseUrl = process.env.NATIONAL_RAIL_KB_BASE_URL?.trim() || "https://opendata.nationalrail.co.uk/api/staticfeeds";
   const url = `${baseUrl.replace(/\/$/, "")}/5.0/incidents`;
 
-  const response = await axios.get(url, {
+  const response = await outboundHttpClient.get(url, {
     headers: {
       "X-Auth-Token": token,
       "Accept": "application/xml,text/xml;q=0.9,*/*;q=0.8",

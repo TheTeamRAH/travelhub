@@ -1,4 +1,4 @@
-import axios from "axios";
+import { describeRequestError, outboundHttpClient } from "./http-client";
 
 export async function fetchRailApiDepartures(
   crs: string,
@@ -37,7 +37,7 @@ export async function fetchRailApiDepartures(
     for (const offset of offsets) {
       params.timeOffset = offset;
       try {
-        const response = await axios.get(url, {
+        const response = await outboundHttpClient.get(url, {
           params,
           headers: {
             'x-apikey': token,
@@ -49,7 +49,7 @@ export async function fetchRailApiDepartures(
         const services = board.trainServices || [];
         combinedServices = combinedServices.concat(Array.isArray(services) ? services : [services]);
       } catch (e: any) {
-        console.error(`Error fetching offset ${offset} for ${dest}:`, e.message);
+        console.error(`Error fetching offset ${offset} for ${dest}:`, describeRequestError(e));
       }
     }
 
