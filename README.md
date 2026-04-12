@@ -1,6 +1,6 @@
 # 🚉 Personal Travel Hub
 
-A personal, self-hosted real-time travel dashboard tailored for common travel. It displays live rail departures for your chosen home station to stations frequently visited (and planned engineering works).
+A personal, self-hosted real-time travel dashboard tailored for common travel. It displays live UK rail departures for your chosen home station to stations frequently visited (and planned engineering works).
 It also displays road travel times with live traffic, and lets you share routes directly to your phone via QR code.
 
 Rail and road journeys are configured in `config/rail.yaml` and `config/roads.yaml` respectively. These files are gitignored and should be populated with your personal travel information (examples are provided).
