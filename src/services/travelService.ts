@@ -12,11 +12,23 @@ export interface TrainDeparture {
 }
 
 export interface RoadJourneyData {
-  id: string;
   travelTime: string;
   trafficStatus: string;
   distance: string;
   summary: string;
+  incidents: Array<{
+    id: string;
+    source: "national-highways";
+    title: string;
+    description: string;
+    category: string;
+    severity: "high" | "medium" | "low";
+    road: string;
+    reportedAt?: string;
+    link?: string;
+    approxDistanceMiles?: number;
+    distanceLabel?: string;
+  }>;
 }
 
 export async function getLiveRoadTravel(journeys: { id: string, origin: string, destination: string }[]): Promise<Record<string, RoadJourneyData>> {

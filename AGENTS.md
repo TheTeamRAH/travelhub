@@ -11,6 +11,7 @@ The rail and road destination information is provided by yaml configs in the con
 - Do not read .env files, they are private.
 - When trying to test the project with new changes, we must use docker, we do not run node, npm, npx or simlar commands locally. You may instead run the equivalent commands inside the docker container that is running for this project.
 - When API keys are defined via environment variables, use them. Do not hardcode API keys in the code.
+- When using google APIs, we want to stay within 50% of the free tier which is 5000 requests, per month. We will take this into consideraion for any auto-refresh of the frontend.
 - When API keys are not defined via environment variables, fallback to web scraping.
 - Always use live data from the APIs (National Rail API and Google Maps API or), do not use mock data unless explicitly asked to do so.
 - Must not write any API keys in the code, code should load the keys from the environment variables only.

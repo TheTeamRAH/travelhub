@@ -242,12 +242,19 @@ app.get("/api/road/travel", async (req, res) => {
   }
 
   try {
-    const results = await fetchRoadTravelData(
-      origins as string,
-      destinations as string,
-      (ids as string) || (destinations as string),
-      apiKey
-    );
+    const originList = String(origins || "").split("|");
+    const destinationList = String(destinations || "").split("|");
+    const idList = String((ids as string) || (destinations as string) || "").split("|");
+
+    const journeys = idList
+      .map((id, index) => ({
+        id,
+        origin: originList[index],
+        destination: destinationList[index],
+      }))
+      .filter(journey => journey.id && journey.origin && journey.destination);
+
+    const results = await fetchRoadTravelData(journeys, apiKey);
     res.json(results);
   } catch (error: any) {
     res.json({ _error: error.message || "Failed to fetch road data" });

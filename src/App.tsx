@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
-import { getLiveRailDepartures, getLiveRoadTravel, type TrainDeparture as TravelDeparture } from './services/travelService';
+import { getLiveRailDepartures, getLiveRoadTravel, type RoadJourneyData, type TrainDeparture as TravelDeparture } from './services/travelService';
 
 // Error Boundary — catches render errors and shows the error message instead of a blank white screen
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -84,6 +84,23 @@ interface EngineeringWork {
   uncertainJourneys: EngineeringJourneyMatch[];
 }
 
+const emptyRoadData: RoadJourneyData = {
+  travelTime: '--',
+  trafficStatus: 'Unavailable',
+  distance: '--',
+  summary: '--',
+  incidents: [],
+};
+
+function incidentTone(severity: RoadJourneyData["incidents"][number]["severity"]) {
+  if (severity === 'high') {
+    return 'bg-rose-100 text-rose-700 border-rose-200';
+  }
+  if (severity === 'medium') {
+    return 'bg-amber-100 text-amber-700 border-amber-200';
+  }
+  return 'bg-slate-100 text-slate-700 border-slate-200';
+}
 
 export default function App() {
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -93,7 +110,7 @@ export default function App() {
   const [railData, setRailData] = useState<Record<string, TravelDeparture[]>>({});
   const [railDataSource, setRailDataSource] = useState<"api" | "scraping">("scraping");
   const [engineeringDataSource, setEngineeringDataSource] = useState<"api" | "scraping">("scraping");
-  const [roadData, setRoadData] = useState<Record<string, { travelTime: string, trafficStatus: string, distance: string, summary: string }>>({});
+  const [roadData, setRoadData] = useState<Record<string, RoadJourneyData>>({});
   const [engineeringWorks, setEngineeringWorks] = useState<EngineeringWork[]>([]);
   const [showToast, setShowToast] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -334,6 +351,47 @@ export default function App() {
     return url.toString();
   };
 
+  const buildMapsEmbedUrl = (origin: string, destination: string, zoom?: number) => {
+    const url = new URL('https://maps.google.com/maps');
+    url.searchParams.set('saddr', origin);
+    url.searchParams.set('daddr', destination);
+    url.searchParams.set('ie', 'UTF8');
+    url.searchParams.set('iwloc', '');
+    url.searchParams.set('output', 'embed');
+    if (zoom != null) {
+      url.searchParams.set('z', String(zoom));
+    }
+    return url.toString();
+  };
+
+  const getExpandedMapZoom = (distanceText?: string) => {
+    if (!distanceText) return undefined;
+    const match = distanceText.match(/[\d.]+/);
+    const miles = match ? Number(match[0]) : Number.NaN;
+    if (Number.isNaN(miles)) return undefined;
+    if (miles >= 120) return 7;
+    if (miles >= 60) return 8;
+    if (miles >= 25) return 9;
+    if (miles >= 10) return 10;
+    return undefined;
+  };
+
+  const getExpandedMapFrameStyle = (distanceText?: string) => {
+    const match = distanceText?.match(/[\d.]+/);
+    const miles = match ? Number(match[0]) : Number.NaN;
+
+    if (Number.isNaN(miles)) {
+      return { left: '-8%', width: '116%' };
+    }
+    if (miles >= 50) {
+      return { left: '-14%', width: '126%' };
+    }
+    if (miles >= 25) {
+      return { left: '-11%', width: '121%' };
+    }
+    return { left: '-8%', width: '116%' };
+  };
+
   const handleStartNavigation = (origin: string, destination: string, e: React.MouseEvent) => {
     e.stopPropagation();
     window.open(buildMapsUrl(origin, destination), "_blank");
@@ -475,15 +533,22 @@ export default function App() {
                     : 'Road data unavailable. Try refreshing.'}
                 </p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="space-y-2">
                   {roadJourneys.map(journey => {
                     const live = roadData[journey.id];
                     if (!live) return null;
                     return (
-                      <li key={journey.id} className="text-sm text-blue-800 flex items-center gap-2">
-                        <span className="font-semibold">{journey.destinationName}:</span>
-                        <span>{live.trafficStatus}</span>
-                        <span className="text-blue-600 font-mono font-bold">({live.travelTime})</span>
+                      <li key={journey.id} className="text-sm text-blue-800">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{journey.destinationName}:</span>
+                          <span>{live.trafficStatus}</span>
+                          <span className="text-blue-600 font-mono font-bold">({live.travelTime})</span>
+                        </div>
+                        {live.incidents[0] && (
+                          <div className="text-xs text-blue-700 mt-1">
+                            {live.incidents[0].road}: {live.incidents[0].title}
+                          </div>
+                        )}
                       </li>
                     );
                   })}
@@ -501,7 +566,7 @@ export default function App() {
               </div>
             ) : (
               roadJourneys.map((journey) => {
-                const live = roadData[journey.id] || { travelTime: '--', trafficStatus: 'Unavailable', distance: '--', summary: '--' };
+                const live = roadData[journey.id] || emptyRoadData;
                 return (
                   <motion.div
                     key={journey.id}
@@ -519,9 +584,17 @@ export default function App() {
                           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                           {live.travelTime}
                         </div>
+                        <div className="mt-3 flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-semibold text-slate-500">{live.distance}</span>
+                          <span className="text-xs text-slate-400">•</span>
+                          <span className="text-xs font-semibold text-slate-500">{live.summary}</span>
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="text-sm text-slate-500 mb-1">{live.trafficStatus}</div>
+                        <div className="text-xs font-semibold text-slate-400 mb-2">
+                          {live.incidents.length === 0 ? 'No incidents on monitored roads' : `${live.incidents.length} incident${live.incidents.length === 1 ? '' : 's'} flagged`}
+                        </div>
                         <div className="flex items-center gap-2 justify-end">
                           <button
                             onClick={(e) => handleSendToPhone(journey.origin, journey.destination, e)}
@@ -542,7 +615,7 @@ export default function App() {
                         width="100%"
                         height="100%"
                         style={{ border: 0 }}
-                        src={`https://maps.google.com/maps?saddr=${encodeURIComponent(journey.origin)}&daddr=${encodeURIComponent(journey.destination)}&t=&z=12&ie=UTF8&iwloc=&output=embed`}
+                        src={buildMapsEmbedUrl(journey.origin, journey.destination)}
                         allowFullScreen
                         className="w-full h-full pointer-events-none"
                         title={`Map ${journey.id}`}
@@ -571,6 +644,32 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="p-5 bg-white">
+                      <div className="flex items-center justify-between gap-4 mb-3">
+                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Incidents Ahead</div>
+                        <div className="text-xs text-slate-500">Source: National Highways</div>
+                      </div>
+                      {live.incidents.length === 0 ? (
+                        <p className="text-sm text-slate-500">No current incidents matched to the monitored roads on this route.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {live.incidents.slice(0, 2).map(incident => (
+                            <div key={incident.id} className="border border-slate-200 rounded-xl p-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="text-sm font-semibold text-slate-900">{incident.title}</div>
+                                  <div className="text-xs text-slate-500 mt-1">{incident.road}{incident.distanceLabel ? ` • ${incident.distanceLabel}` : ''}</div>
+                                </div>
+                                <span className={cn('text-[10px] font-bold uppercase tracking-wider border rounded-full px-2 py-1', incidentTone(incident.severity))}>
+                                  {incident.category || incident.severity}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );
@@ -606,30 +705,37 @@ export default function App() {
                     </button>
                   </div>
 
-                  <div className="flex-1 relative bg-slate-100">
+                  <div className="flex-1 relative bg-slate-100 overflow-hidden">
                     <iframe
                       width="100%"
                       height="100%"
-                      style={{ border: 0 }}
-                      src={`https://maps.google.com/maps?saddr=${encodeURIComponent(expandedJourney.origin)}&daddr=${encodeURIComponent(expandedJourney.destination)}&t=&z=13&ie=UTF8&iwloc=&output=embed`}
+                      src={buildMapsEmbedUrl(
+                        expandedJourney.origin,
+                        expandedJourney.destination,
+                        getExpandedMapZoom(roadData[expandedRoadCardId]?.distance)
+                      )}
                       allowFullScreen
-                      className="w-full h-full"
+                      className="absolute inset-y-0 h-full"
+                      style={{
+                        border: 0,
+                        ...getExpandedMapFrameStyle(roadData[expandedRoadCardId]?.distance),
+                      }}
                       title="Google Maps Route Expanded"
                     ></iframe>
 
-                    {/* Map UI Elements - Overlaying on the real map */}
-                    <div className="absolute top-6 left-6 space-y-3 pointer-events-none">
-                      <div className="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-xl border border-slate-100 max-w-xs">
+                    <div className="absolute right-6 bottom-28 w-[21rem] max-w-[calc(100%-3rem)] md:w-[22rem]">
+                      <div className="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-xl border border-slate-100">
                         <div className="flex items-center gap-3 mb-3">
-                          <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600">
+                          <div className="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 shrink-0">
                             <Car size={20} />
                           </div>
-                          <div>
+                          <div className="min-w-0">
                             <div className="text-2xl font-bold text-slate-900">{roadData[expandedRoadCardId]?.travelTime ?? '--'}</div>
-                            <div className="text-xs font-bold text-emerald-600 uppercase">Live Traffic</div>
+                            <div className="text-xs font-bold text-emerald-600 uppercase">Live Traffic And Incidents</div>
                           </div>
                         </div>
-                        <div className="space-y-2">
+
+                        <div className="space-y-2 mb-4">
                           <div className="flex items-center gap-2 text-sm text-slate-600">
                             <div className="w-2 h-2 rounded-full bg-slate-300" />
                             <span>{roadData[expandedRoadCardId]?.distance ?? '--'} {roadData[expandedRoadCardId]?.summary ?? ''}</span>
@@ -638,6 +744,55 @@ export default function App() {
                             <div className="w-2 h-2 rounded-full bg-amber-400" />
                             <span>{roadData[expandedRoadCardId]?.trafficStatus ?? 'Unavailable'}</span>
                           </div>
+                          <div className="flex items-center gap-2 text-sm text-slate-600">
+                            <div className="w-2 h-2 rounded-full bg-rose-400" />
+                            <span>{(roadData[expandedRoadCardId]?.incidents?.length ?? 0) === 0 ? 'No incidents matched on monitored roads' : `${roadData[expandedRoadCardId]?.incidents.length} incidents ahead`}</span>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-slate-100 pt-3">
+                          <div className="flex items-center justify-between gap-4 mb-3">
+                            <div>
+                              <div className="text-sm font-bold text-slate-900">Incidents Ahead</div>
+                              <div className="text-xs text-slate-500">Matched from the National Highways feed</div>
+                            </div>
+                          </div>
+                          {(roadData[expandedRoadCardId]?.incidents?.length ?? 0) === 0 ? (
+                            <p className="text-sm text-slate-500">No active incidents matched on the monitored roads for this journey.</p>
+                          ) : (
+                            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                              {roadData[expandedRoadCardId]?.incidents.map(incident => (
+                                <div key={incident.id} className="rounded-xl border border-slate-200 p-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <div className="text-sm font-semibold text-slate-900">{incident.title}</div>
+                                      <div className="text-xs text-slate-500 mt-1">
+                                        {incident.road}
+                                        {incident.distanceLabel ? ` • ${incident.distanceLabel}` : ''}
+                                        {incident.reportedAt ? ` • ${incident.reportedAt}` : ''}
+                                      </div>
+                                    </div>
+                                    <span className={cn('text-[10px] font-bold uppercase tracking-wider border rounded-full px-2 py-1 shrink-0', incidentTone(incident.severity))}>
+                                      {incident.category || incident.severity}
+                                    </span>
+                                  </div>
+                                  {incident.description && (
+                                    <p className="text-xs text-slate-600 mt-2 leading-relaxed">{incident.description}</p>
+                                  )}
+                                  {incident.link && (
+                                    <a
+                                      href={incident.link}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 text-xs font-semibold text-brand-primary mt-2"
+                                    >
+                                      View feed item <ArrowRight size={12} />
+                                    </a>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>

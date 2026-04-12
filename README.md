@@ -5,7 +5,7 @@ It also displays road travel times with live traffic, and lets you share routes 
 
 Rail and road journeys are configured in `config/rail.yaml` and `config/roads.yaml` respectively. These files are gitignored and should be populated with your personal travel information (examples are provided).
 
-Live road traffic is provided by Google Maps Distance Matrix API. You will need to obtain an API key from Google Cloud Console and set it as an environment variable `GOOGLE_MAPS_API_KEY`. API keys should be restricted to `Distance Matrix API` and `Maps Embed API`. The free tier is sufficient for personal use and will only update every 25 minutes (6am-midnight only, to stay within 50% of the API free tier).
+Live road traffic is provided by Google Maps Routes API. You will need to obtain an API key from Google Cloud Console and set it as an environment variable `GOOGLE_MAPS_API_KEY`. The key should have `Routes API` enabled; `Maps Embed API` is still useful for the embedded route panels. Travelhub also supplements route results with official National Highways incident feeds so road cards can flag collisions, closures, obstructions, and similar hazards on the monitored roads ahead. If `Routes API` access is denied for the configured key, the app falls back to Google Distance Matrix for travel times and traffic status, but incident matching is unavailable on that fallback path.
 
 Live rail departures are provided by National Rail when a token is provided via the environment variable `NATIONAL_RAIL_TOKEN`, however this isn't required as the the app will fall back to web scraping. Engineering works can additionally use the National Rail Knowledgebase Incidents feed when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise they fall back to scraping National Rail’s public disruption pages.
 
@@ -20,8 +20,8 @@ Live rail departures are provided by National Rail when a token is provided via 
 
 | Feature | Detail |
 |---|---|
-| 🚂 **Live Rail Departures** | Real-time train times from the National Rail [Rail Data Marketplace](https://raildata.org.uk) JSON API, grouped per destination. Shows best-arriving and next train, ETA, platform, status, and calling points. The rail header source label reflects whether departures and engineering works are using the API or scraping |
-| 🚗 **Live Road Travel** | Google Maps Distance Matrix API — live travel time and traffic status per route in miles. When the API key is absent, route cards and Google Maps embeds still render from your configured journeys, but live traffic remains unavailable |
+| 🚂 **Live Rail Departures** | Real-time train times from the National Rail [Rail Data Marketplace](https://raildata.org.uk) JSON API, grouped per destination. Shows best-arriving and next train, ETA, platform, status, and calling points. Falls back to web scraping if no API token is set |
+| 🚗 **Live Road Travel** | Google Maps Routes API — live travel time, traffic-aware route summaries, and route-matched incidents per journey |
 | 🛠️ **Engineering Works** | Planned disruptions only when they match one of your configured rail journeys, including likely intermediate stations inferred from live departures. Uses the National Rail Knowledgebase Incidents feed when available, otherwise falls back to National Rail website scraping |
 | 📱 **Send to Device** | QR code modal + copy-link button to easily open a route on your phone |
 | 🗺️ **Embedded Maps** | Google Maps embedded per route with single-click full-screen expansion |
@@ -52,7 +52,8 @@ travel-hub/
 │   │   ├── rail-engineering-api.ts # Knowledgebase Incidents client for engineering works
 │   │   ├── rail-engineering.ts  # Shared engineering work types and journey impact matcher
 │   │   ├── rail-scraper.ts      # Web scraping fallback for departures and engineering works
-│   │   └── road-api.ts          # Google Maps Distance Matrix client
+│   │   ├── road-api.ts          # Google Maps Routes client
+│   │   └── road-incidents.ts    # National Highways incident feed matcher
 │   └── services/
 │       └── travelService.ts     # Client-side API helpers (calls to /api/road and /api/rail endpoints)
 │
@@ -104,13 +105,14 @@ Contains the core backend logic for data fetching, used by `server.ts`:
 - **`rail-engineering-api.ts`**: Fetches structured planned engineering works from the National Rail Knowledgebase Incidents feed using `NATIONAL_RAIL_KB_TOKEN`.
 - **`rail-engineering.ts`**: Defines the engineering works data model and matches incidents against the configured journeys in `config/rail.yaml`, including likely intermediate stops inferred from live departures.
 - **`rail-scraper.ts`**: Provides a robust fallback by scraping the National Rail website when no API token is present. Also handles engineering works fallback.
-- **`road-api.ts`**: Encapsulates the logic for querying the Google Maps Distance Matrix API.
+- **`road-api.ts`**: Encapsulates the logic for querying the Google Maps Routes API and shaping traffic-aware route data.
+- **`road-incidents.ts`**: Fetches official National Highways incident feeds and matches them to roads used by the computed route.
 
 #### `server.ts`
 Express server that acts as a secure backend proxy. It delegates the heavy lifting to the modules in `src/lib/`:
 - **`GET /api/rail/departures`**: Uses `fetchRailApiDepartures` (from `rail-api.ts`) if a token is provided; otherwise, falls back to `scrapeRailDepartures` (from `rail-scraper.ts`).
-- **`GET /api/rail/engineering`**: Uses `fetchKnowledgebaseEngineeringWorks` (from `rail-engineering-api.ts`) when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise falls back to `scrapeEngineeringWorks` (from `rail-scraper.ts`). The route returns structured incidents and includes configured-journey impact matching. Route-hint enrichment is only taken from the official departures API when `NATIONAL_RAIL_TOKEN` is configured, so scraper fallback does not broaden engineering matches across unrelated journeys.
-- **`GET /api/road/travel`**: Uses `fetchRoadTravelData` from `road-api.ts`.
+- **`GET /api/rail/engineering`**: Uses `fetchKnowledgebaseEngineeringWorks` (from `rail-engineering-api.ts`) when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise falls back to `scrapeEngineeringWorks` (from `rail-scraper.ts`). The route returns structured incidents and includes configured-journey impact matching.
+- **`GET /api/road/travel`**: Uses `fetchRoadTravelData` from `road-api.ts`, including route-aware incident matching from `road-incidents.ts`.
 - **Configuration Routes**: Serves the rail and road journey configurations from the `config/` directory.
 
 #### `vite.config.ts`
@@ -165,9 +167,9 @@ destinations:
 | `NATIONAL_RAIL_TOKEN` | Optional | API key from [Rail Data Marketplace](https://raildata.org.uk). Subscribe to the **"Live Arrival and Departure Boards (Arr and Dep)"** product, then find the key in the subscriber under **"Specificiation"**. Used as the `x-apikey` header. Without this, the app falls back to web scraping. See [docs/raildata-api-examples.md](docs/raildata-api-examples.md) for an example |
 | `NATIONAL_RAIL_KB_TOKEN` | Optional | Knowledgebase auth token for the National Rail `Incidents` feed, used by the engineering works panel to fetch richer planned-engineering data. When absent or invalid, the app falls back to scraping National Rail’s public disruption pages |
 | `NATIONAL_RAIL_KB_BASE_URL` | Optional | Override for the Knowledgebase incidents feed base URL. Defaults to `https://opendata.nationalrail.co.uk/api/staticfeeds` |
-| `GOOGLE_MAPS_API_KEY` | Optional | A Google Cloud API key with the **Distance Matrix API** enabled. If not set, road travel data is unavailable but the app still works |
+| `GOOGLE_MAPS_API_KEY` | Optional | A Google Cloud API key with the **Routes API** enabled. If not set, road travel data is unavailable but the app still works |
 
-> **Note:** The application works fully without any keys. Rail departures and engineering works both fall back to scraping when their respective National Rail credentials are absent. Road journey cards and Google Maps embeds still render from config when the Google Maps key is absent, but live traffic shows a clear "API key not configured" message.
+> **Note:** The application works fully without any keys. Rail departures and engineering works both fall back to scraping when their respective National Rail credentials are absent. Road travel shows a clear "API key not configured" message when the Google Maps key is absent. Route incidents currently use official National Highways feeds, so they are strongest for journeys touching the English strategic road network. If your Google key only has Distance Matrix access, travel times will still work but incidents ahead will be empty until `Routes API` is enabled.
 
 ---
 
@@ -376,7 +378,7 @@ Browser (React SPA)
 Express Server (server.ts) — port 3000
     ├── Serves pre-built Vite dist/ (production)
     ├── Proxies requests to National Rail (scraping / SOAP API)
-    └── Proxies requests to Google Maps Distance Matrix API
+    └── Proxies requests to Google Maps Routes API and National Highways incident feeds
 ```
 
 During development-oriented container workflows, Vite is mounted as middleware inside Express so a single port (3000) serves both the frontend and the backend API routes.
