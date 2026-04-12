@@ -3,11 +3,6 @@ services:
     build: .
     ports:
       - "3150:3000"
-    environment:
-      - NATIONAL_RAIL_TOKEN=${NATIONAL_RAIL_TOKEN}
-      - NATIONAL_RAIL_KB_TOKEN=${NATIONAL_RAIL_KB_TOKEN}
-      - NATIONAL_RAIL_KB_BASE_URL=${NATIONAL_RAIL_KB_BASE_URL}
-      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY}
     volumes:
       - ./config/roads.yaml:/app/config/roads.yaml:ro
       - ./config/rail.yaml:/app/config/rail.yaml:ro
