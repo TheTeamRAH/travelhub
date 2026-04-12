@@ -37,6 +37,11 @@ travel-hub/
 ├── .ai/
 │   └── skills/
 │       └── travelhub-live-data-agent/  # Project skill for live data maintenance workflows
+│           ├── SKILL.md                # Skill entrypoint with workflow, scope, and guardrails
+│           ├── agents/
+│           │   └── openai.yaml         # OpenAI/Codex registration metadata for the skill
+│           └── references/
+│               └── live-data-contracts.md # Supporting runtime contracts for live rail/road behavior
 │
 ├── src/
 │   ├── App.tsx                  # Main React application — all UI, state, and data logic
@@ -219,17 +224,58 @@ This keeps the final image lean by excluding build-only tooling.
 
 ---
 
-## 💻 Local Development
+## 🤖 AI Project Files
+
+The `.ai/` directory contains project-specific assistant guidance for repository-aware AI tools. These files are documentation and workflow metadata for maintenance tasks; they are not used by the Travelhub application at runtime.
+
+### `.ai/skills/travelhub-live-data-agent/SKILL.md`
+
+This is the main skill definition for live-data work. It tells an AI agent:
+- when to use the skill
+- which Travelhub files own rail and road behavior
+- how source selection should work between API usage and scraping fallback
+- that verification should use Docker-oriented workflows
+
+Use it for changes involving National Rail integration, engineering works, Google Maps traffic data, config contracts, or frontend/backend mapping for live data.
+
+### `.ai/skills/travelhub-live-data-agent/agents/openai.yaml`
+
+This file registers the skill for OpenAI/Codex-style tooling. It defines:
+- the display name shown to the AI tool
+- a short description of the skill
+- a default prompt that suggests the skill for relevant tasks
+- an implicit-invocation policy flag
+
+Its purpose is discovery and activation of the skill within compatible AI tooling.
+
+### `.ai/skills/travelhub-live-data-agent/references/live-data-contracts.md`
+
+This reference file captures the repo’s live-data contracts so AI agents can make safe changes without re-deriving the rules each time. It documents:
+- source-selection rules for `NATIONAL_RAIL_TOKEN` and `GOOGLE_MAPS_API_KEY`
+- the main runtime files responsible for rail and road flows
+- expected shapes for `config/rail.yaml` and `config/roads.yaml`
+- response contracts for the `/api/*` endpoints
+- the expectation to verify using Docker-based workflows
+
+## 💻 Development And Verification
+
+Per project policy, development and testing should be done with Docker rather than local `npm`, `node`, or `npx` commands.
+
+### Start The App
 
 ```bash
-# Install dependencies
-npm install
-
-# Start the development server (Express backend + Vite HMR frontend)
-npm run dev
+docker compose up --build -d
 ```
 
-The app runs at **http://localhost:3000**. Changes to `src/` files are hot-reloaded instantly by Vite. Changes to `server.ts` require a server restart.
+The application will be available at **http://localhost:3150**.
+
+### Run Project Commands In The Container
+
+```bash
+docker compose exec app sh
+```
+
+Run any project-specific inspection or verification commands inside the container so the workflow stays aligned with the deployed environment.
 
 ---
 
@@ -256,11 +302,8 @@ This section is for engineers picking up this project for the first time. Below 
 | **lucide-react** | Icon component library |
 | **clsx + tailwind-merge** | Utilities for conditionally composing Tailwind class names |
 | **fast-xml-parser** | Parses the SOAP/XML response from the National Rail official API |
-
-### AI Project Skill
-
-The repo includes a project-specific Codex skill in `.ai/skills/travelhub-live-data-agent/` for work on live rail and road data behavior. It is intended for tasks that span source selection, scraper fallback, YAML config contracts, frontend/backend data mapping, and Docker-based runtime verification.
-| **Docker + Compose** | Containerised deployment |
+| **Docker + Compose** | Containerised runtime and the standard development/verification workflow |
+| **Codex project skill files (`.ai/`)** | Repository-specific AI guidance for safe live-data maintenance work |
 
 ---
 
@@ -330,7 +373,7 @@ Express Server (server.ts) — port 3000
     └── Proxies requests to Google Maps Distance Matrix API
 ```
 
-In development (`npm run dev`), Vite is mounted as middleware inside Express — so a single port (3000) serves both the frontend with HMR and the backend API routes.
+During development-oriented container workflows, Vite is mounted as middleware inside Express so a single port (3000) serves both the frontend and the backend API routes.
 
 In production (Docker), Vite has already compiled the frontend to `dist/`. Express serves those static files directly and continues to handle `/api/*` routes.
 
