@@ -9,6 +9,8 @@ import * as yaml from "js-yaml";
 import { scrapeEngineeringWorks, scrapeRailDepartures } from "./src/lib/rail-scraper";
 import { fetchRailApiDepartures } from "./src/lib/rail-api";
 import { fetchRoadTravelData } from "./src/lib/road-api";
+import { attachJourneyImpacts, RailJourneyReference } from "./src/lib/rail-engineering";
+import { fetchKnowledgebaseEngineeringWorks } from "./src/lib/rail-engineering-api";
 
 
 const app = express();
@@ -16,6 +18,82 @@ const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
+
+function loadRailConfig() {
+  const configPath = path.resolve(process.cwd(), "config", "rail.yaml");
+  if (!fs.existsSync(configPath)) {
+    return { _configMissing: true as const };
+  }
+
+  const raw = fs.readFileSync(configPath, "utf8");
+  const parsed = yaml.load(raw) as any;
+
+  if (!parsed?.homeStation || !parsed?.destinations) {
+    throw new Error("rail.yaml must contain 'homeStation' and 'destinations'");
+  }
+
+  return {
+    homeStation: parsed.homeStation,
+    operatorCodes: parsed.operatorCodes || (parsed.operatorCode ? [parsed.operatorCode] : ["LE"]),
+    destinations: parsed.destinations,
+    walkTimeMins: parsed.walkTimeMins || 10
+  };
+}
+
+function extractStationName(stop: string): string {
+  return stop.replace(/\s+\([^)]*\)\s*$/, "").trim();
+}
+
+async function loadJourneyPathHints(config: {
+  homeStation: { name: string; crs: string };
+  destinations: { id: string; name: string; crs: string }[];
+}) {
+  const hints: Record<string, string[]> = {};
+  const departureToken = process.env.NATIONAL_RAIL_TOKEN?.replace(/^["']|["']$/g, "").trim();
+
+  try {
+    if (departureToken) {
+      const departures = await fetchRailApiDepartures(
+        config.homeStation.crs,
+        config.destinations.map(destination => destination.name),
+        config.destinations.map(destination => destination.crs),
+        departureToken
+      );
+
+      for (const destination of config.destinations) {
+        const services = departures[destination.name] || [];
+        const via = Array.from(new Set(
+          services
+            .slice(0, 5)
+            .flatMap((service: any) => service.stops || [])
+            .map((stop: string) => extractStationName(stop))
+            .filter(Boolean)
+        ));
+
+        hints[destination.id] = via;
+      }
+
+      return hints;
+    }
+
+    for (const destination of config.destinations) {
+      const services = await scrapeRailDepartures(config.homeStation.crs, destination.name, destination.crs);
+      const via = Array.from(new Set(
+        services
+          .slice(0, 5)
+          .flatMap((service: any) => service.stops || [])
+          .map((stop: string) => extractStationName(stop))
+          .filter(Boolean)
+      ));
+
+      hints[destination.id] = via;
+    }
+  } catch (error: any) {
+    console.error("Failed to load journey path hints:", error.message);
+  }
+
+  return hints;
+}
 
 // --- Rail Integration ---
 app.get("/api/rail/departures", async (req, res) => {
@@ -62,42 +140,86 @@ app.get("/api/rail/departures", async (req, res) => {
 
 app.get("/api/rail/engineering", async (req, res) => {
   try {
+    const config = (() => {
+      try {
+        return loadRailConfig();
+      } catch (error: any) {
+        return { _error: error.message };
+      }
+    })();
+
     const operatorQuery = req.query.operator;
     let operators: string[] = [];
 
     if (Array.isArray(operatorQuery)) {
-      operators = operatorQuery.map(op => String(op));
-    } else if (typeof operatorQuery === 'string') {
-      operators = [operatorQuery];
+      operators = operatorQuery.map(op => String(op).toUpperCase());
+    } else if (typeof operatorQuery === "string") {
+      operators = [operatorQuery.toUpperCase()];
+    } else if (!("_configMissing" in config) && !("_error" in config)) {
+      operators = config.operatorCodes.map((op: string) => op.toUpperCase());
     } else {
-      operators = ['LE']; // Default fallback
+      operators = ["LE"];
     }
 
-    const works = await scrapeEngineeringWorks(operators);
-    res.json({ works });
+    const journeyPathHints = !("_configMissing" in config) && !("_error" in config)
+      ? await loadJourneyPathHints(config)
+      : {};
+
+    const journeys: RailJourneyReference[] = !("_configMissing" in config) && !("_error" in config)
+      ? config.destinations.map((destination: any) => ({
+        id: destination.id,
+        originName: config.homeStation.name,
+        originCrs: config.homeStation.crs,
+        destinationName: destination.name,
+        destinationCrs: destination.crs,
+        operatorCodes: operators,
+        viaStationNames: journeyPathHints[destination.id] || [],
+      }))
+      : [];
+
+    const kbToken = process.env.NATIONAL_RAIL_KB_TOKEN?.replace(/^["']|["']$/g, "").trim();
+
+    let works;
+    let source: "api" | "scraping";
+
+    if (kbToken) {
+      try {
+        works = await fetchKnowledgebaseEngineeringWorks(kbToken);
+        source = "api";
+      } catch (error: any) {
+        console.error("Knowledgebase engineering API failed:", error.message);
+        works = await scrapeEngineeringWorks(operators);
+        source = "scraping";
+      }
+    } else {
+      works = await scrapeEngineeringWorks(operators);
+      source = "scraping";
+    }
+
+    const filteredWorks = operators.length > 0
+      ? works.filter(work => {
+        if (work.operatorsAffected.length === 0) return true;
+        return work.operatorsAffected.some(operator => operator.code && operators.includes(operator.code.toUpperCase()));
+      })
+      : works;
+
+    const enrichedWorks = attachJourneyImpacts(filteredWorks, journeys)
+      .filter(work => work.impactedJourneys.length > 0);
+
+    res.json({ source, works: enrichedWorks });
   } catch (error) {
-    res.json({ works: ["Service information currently unavailable."] });
+    res.json({ source: "scraping", works: [] });
   }
 });
 
 // --- Rail Journey Config ---
 app.get("/api/config/rail", (req, res) => {
-  const configPath = path.resolve(process.cwd(), "config", "rail.yaml");
-  if (!fs.existsSync(configPath)) {
-    return res.json({ _configMissing: true });
-  }
   try {
-    const raw = fs.readFileSync(configPath, "utf8");
-    const parsed = yaml.load(raw) as any;
-    if (!parsed?.homeStation || !parsed?.destinations) {
-      return res.status(400).json({ _error: "rail.yaml must contain 'homeStation' and 'destinations'" });
+    const config = loadRailConfig();
+    if ("_configMissing" in config) {
+      return res.json({ _configMissing: true });
     }
-    res.json({
-      homeStation: parsed.homeStation,
-      operatorCodes: parsed.operatorCodes || (parsed.operatorCode ? [parsed.operatorCode] : ["LE"]),
-      destinations: parsed.destinations,
-      walkTimeMins: parsed.walkTimeMins || 10
-    });
+    res.json(config);
   } catch (e: any) {
     console.error("Failed to parse rail.yaml:", e.message);
     res.status(500).json({ _error: `Failed to parse rail.yaml: ${e.message}` });
