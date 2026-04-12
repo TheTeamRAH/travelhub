@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "3150:3000"
+    env_file:
+      - .env
     volumes:
       - ./config/roads.yaml:/app/config/roads.yaml:ro
       - ./config/rail.yaml:/app/config/rail.yaml:ro
