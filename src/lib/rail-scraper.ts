@@ -2,92 +2,128 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import { EngineeringWork } from "./rail-engineering";
 
+interface NationalRailService {
+  rid?: string;
+  destination?: Array<{ locationName?: string; crs?: string }>;
+  journeyDetails?: {
+    to?: { locationName?: string; crs?: string };
+    stops?: Array<{ stationName?: string; description?: string }>;
+    arrivalInfo?: { scheduled?: string };
+  };
+  departureInfo?: { scheduled?: string };
+  arrivalInfo?: { scheduled?: string };
+  status?: { status?: string; delay?: string };
+  platform?: string;
+}
+
+interface CallingPoint {
+  name: string;
+  crs?: string;
+}
+
+function normaliseStationText(value?: string) {
+  return (value || "").trim().toLowerCase();
+}
+
+async function fetchBoardServices(url: string): Promise<NationalRailService[]> {
+  const response = await axios.get(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-GB,en;q=0.5',
+    },
+    maxRedirects: 5,
+    timeout: 10000
+  });
+
+  const $ = cheerio.load(response.data);
+  const nextDataScript = $('#__NEXT_DATA__').html();
+
+  if (!nextDataScript) {
+    console.warn(`Could not find __NEXT_DATA__ script tag on National Rail page for ${url}`);
+    return [];
+  }
+
+  const nextData = JSON.parse(nextDataScript);
+  return nextData.props?.pageProps?.liveTrainsState?.queries?.[0]?.state?.data?.pages?.[0]?.services || [];
+}
+
+async function fetchCallingPoints(rid: string, fromCrs: string, toCrs: string): Promise<CallingPoint[]> {
+  try {
+    const gqlResponse = await axios.post('https://nreservices.nationalrail.co.uk/live-info', {
+      operationName: "ServiceDetails",
+      variables: {
+        rid: rid,
+        fromCrs: fromCrs,
+        toCrs: toCrs,
+        direction: "DEPARTURE"
+      },
+      query: `query ServiceDetails($rid: ID!, $fromCrs: String, $toCrs: String, $direction: NreDirectionType!) {
+        ServiceDetails(rid: $rid, fromCrs: $fromCrs, toCrs: $toCrs, direction: $direction) {
+          callingPoints {
+            stationInfo {
+              locationName
+              crs
+            }
+          }
+        }
+      }`
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Origin': 'https://www.nationalrail.co.uk',
+        'Referer': 'https://www.nationalrail.co.uk/',
+      },
+      timeout: 5000
+    });
+
+    const allStops = gqlResponse.data?.data?.ServiceDetails?.callingPoints || [];
+    const fromIndex = allStops.findIndex((cp: any) => cp.stationInfo.crs === fromCrs);
+    const subsequentStops = fromIndex !== -1 ? allStops.slice(fromIndex + 1) : allStops;
+
+    return subsequentStops.map((cp: any) => ({
+      name: cp.stationInfo.locationName,
+      crs: cp.stationInfo.crs
+    })).filter((cp: CallingPoint) => cp.name);
+  } catch (e) {
+    console.error("Calling points fetch failed:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
 // --- Rail Scraping Fallback ---
 export async function scrapeRailDepartures(crs: string, destination?: string, destCrs?: string) {
   try {
     const stationCode = (crs || 'SNF').toUpperCase().substring(0, 3);
     const destCode = destCrs ? destCrs.toUpperCase().substring(0, 3) : null;
-
-    const url = destCode
+    const boardUrl = `https://www.nationalrail.co.uk/live-trains/departures/${stationCode}/`;
+    const filteredUrl = destCode
       ? `https://www.nationalrail.co.uk/live-trains/departures/${stationCode}/${destCode}/`
-      : `https://www.nationalrail.co.uk/live-trains/departures/${stationCode}/`;
+      : boardUrl;
 
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-GB,en;q=0.5',
-      },
-      maxRedirects: 5,
-      timeout: 10000
-    });
+    let services = await fetchBoardServices(filteredUrl);
 
-    const $ = cheerio.load(response.data);
-    const nextDataScript = $('#__NEXT_DATA__').html();
-
-    if (!nextDataScript) {
-      console.warn(`Could not find __NEXT_DATA__ script tag on National Rail page for ${url}`);
-      return [];
+    if (services.length === 0 && (destination || destCode) && filteredUrl !== boardUrl) {
+      console.log(`[Scrape] ${stationCode} → ${destCode}: filtered board empty, retrying full board`);
+      services = await fetchBoardServices(boardUrl);
     }
 
-    const nextData = JSON.parse(nextDataScript);
-    let services: any[] = nextData.props?.pageProps?.liveTrainsState?.queries?.[0]?.state?.data?.pages?.[0]?.services || [];
-
     console.log(`[Scrape] ${stationCode} → ${destCode || 'Everywhere'} (Departures): ${services.length} total services from board`);
-
-    // Create a helper to fetch calling points via GraphQL
-    const fetchCallingPoints = async (rid: string, fromCrs: string, toCrs: string) => {
-      try {
-        const gqlResponse = await axios.post('https://nreservices.nationalrail.co.uk/live-info', {
-          operationName: "ServiceDetails",
-          variables: {
-            rid: rid,
-            fromCrs: fromCrs,
-            toCrs: toCrs,
-            direction: "DEPARTURE"
-          },
-          query: `query ServiceDetails($rid: ID!, $fromCrs: String, $toCrs: String, $direction: NreDirectionType!) {
-            ServiceDetails(rid: $rid, fromCrs: $fromCrs, toCrs: $toCrs, direction: $direction) {
-              callingPoints {
-                stationInfo {
-                  locationName
-                  crs
-                }
-              }
-            }
-          }`
-        }, {
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Origin': 'https://www.nationalrail.co.uk',
-            'Referer': 'https://www.nationalrail.co.uk/',
-          },
-          timeout: 5000
-        });
-
-        const allStops = gqlResponse.data?.data?.ServiceDetails?.callingPoints || [];
-
-        // Find the index of the current station (fromCrs) to only show subsequent stops
-        const fromIndex = allStops.findIndex((cp: any) => cp.stationInfo.crs === fromCrs);
-        const subsequentStops = fromIndex !== -1 ? allStops.slice(fromIndex + 1) : allStops;
-
-        return subsequentStops.map((cp: any) => cp.stationInfo.locationName);
-      } catch (e) {
-        console.error("Calling points fetch failed:", e instanceof Error ? e.message : e);
-        return [];
-      }
-    };
 
     const departurePromises = services.map(async (s: any) => {
       const depInfo = s.departureInfo || {};
       const actualDestArrivalInfo = s.arrivalInfo || {};
       const arrivalAtDest = s.journeyDetails?.arrivalInfo || actualDestArrivalInfo;
+      const directDestinationName = s.destination?.[0]?.locationName || s.journeyDetails?.to?.locationName || "";
+      const directDestinationCrs = (s.destination?.[0]?.crs || s.journeyDetails?.to?.crs || "").toUpperCase();
+      const destinationNameLower = normaliseStationText(destination);
 
       let departureTime = depInfo.scheduled ? new Date(depInfo.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) : "N/A";
       let eta = arrivalAtDest.scheduled ? new Date(arrivalAtDest.scheduled).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) : "N/A";
       let duration = 0;
       let status = "Unknown";
+      let callingPoints: CallingPoint[] = [];
       let stops: string[] = [];
 
       if (depInfo.scheduled && arrivalAtDest.scheduled) {
@@ -103,8 +139,13 @@ export async function scrapeRailDepartures(crs: string, destination?: string, de
       else if (s.status?.delay) status = s.status.delay;
       else status = statusSlug;
 
-      if (s.rid && s.destination?.[0]?.crs) {
-        stops = await fetchCallingPoints(s.rid, stationCode, s.destination[0].crs);
+      const matchesDirectDestination =
+        (!!destCode && directDestinationCrs === destCode) ||
+        (!!destinationNameLower && normaliseStationText(directDestinationName).includes(destinationNameLower));
+
+      if (s.rid && directDestinationCrs && ((destination && !matchesDirectDestination) || !destination)) {
+        callingPoints = await fetchCallingPoints(s.rid, stationCode, directDestinationCrs);
+        stops = callingPoints.map(cp => cp.name);
       }
 
       if (stops.length === 0 && Array.isArray(s.journeyDetails?.stops)) {
@@ -113,19 +154,16 @@ export async function scrapeRailDepartures(crs: string, destination?: string, de
         ).filter(Boolean);
       }
 
-      // Filter only if we don't have a destCode
-      if (destination && !destCode) {
-        const destNameLower = destination.toLowerCase();
-        const termName = (s.destination?.[0]?.locationName || '').toLowerCase();
-        const matchesTerm = termName.includes(destNameLower);
-        const matchesStop = stops.some(st => st.toLowerCase().includes(destNameLower));
-        if (!matchesTerm && !matchesStop) return null;
+      if (destination || destCode) {
+        const matchesStopByCode = !!destCode && callingPoints.some(cp => cp.crs?.toUpperCase() === destCode);
+        const matchesStopByName = !!destinationNameLower && callingPoints.some(cp => normaliseStationText(cp.name).includes(destinationNameLower));
+        if (!matchesDirectDestination && !matchesStopByCode && !matchesStopByName) return null;
       }
 
       return {
         id: `${s.rid || Math.random().toString(36).substr(2, 9)}-${destination || 'board'}`,
         time: departureTime,
-        destination: s.destination?.[0]?.locationName || destination || "Unknown",
+        destination: directDestinationName || destination || "Unknown",
         status: status,
         platform: s.platform || "TBC",
         duration: duration > 0 ? duration : 0,

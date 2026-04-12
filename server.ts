@@ -52,32 +52,19 @@ async function loadJourneyPathHints(config: {
   const departureToken = process.env.NATIONAL_RAIL_TOKEN?.replace(/^["']|["']$/g, "").trim();
 
   try {
-    if (departureToken) {
-      const departures = await fetchRailApiDepartures(
-        config.homeStation.crs,
-        config.destinations.map(destination => destination.name),
-        config.destinations.map(destination => destination.crs),
-        departureToken
-      );
-
-      for (const destination of config.destinations) {
-        const services = departures[destination.name] || [];
-        const via = Array.from(new Set(
-          services
-            .slice(0, 5)
-            .flatMap((service: any) => service.stops || [])
-            .map((stop: string) => extractStationName(stop))
-            .filter(Boolean)
-        ));
-
-        hints[destination.id] = via;
-      }
-
+    if (!departureToken) {
       return hints;
     }
 
+    const departures = await fetchRailApiDepartures(
+      config.homeStation.crs,
+      config.destinations.map(destination => destination.name),
+      config.destinations.map(destination => destination.crs),
+      departureToken
+    );
+
     for (const destination of config.destinations) {
-      const services = await scrapeRailDepartures(config.homeStation.crs, destination.name, destination.crs);
+      const services = departures[destination.name] || [];
       const via = Array.from(new Set(
         services
           .slice(0, 5)

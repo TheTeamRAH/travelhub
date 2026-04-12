@@ -92,6 +92,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [railData, setRailData] = useState<Record<string, TravelDeparture[]>>({});
   const [railDataSource, setRailDataSource] = useState<"api" | "scraping">("scraping");
+  const [engineeringDataSource, setEngineeringDataSource] = useState<"api" | "scraping">("scraping");
   const [roadData, setRoadData] = useState<Record<string, { travelTime: string, trafficStatus: string, distance: string, summary: string }>>({});
   const [engineeringWorks, setEngineeringWorks] = useState<EngineeringWork[]>([]);
   const [showToast, setShowToast] = useState<string | null>(null);
@@ -119,6 +120,7 @@ export default function App() {
   useEffect(() => {
     const fetchInitialData = async () => {
       setIsLoading(true);
+      let railFailed = false;
       try {
         // Fetch Rail config from YAML
         let initialRailConfig: RailConfig | null = null;
@@ -139,20 +141,23 @@ export default function App() {
         }
 
         if (!isMissingRailConfig && initialRailConfig) {
-          // Fetch Rail Data
-          const dests = initialRailConfig.destinations.map((d: any) => ({ name: d.name, crs: d.crs }));
-          const liveRail = await getLiveRailDepartures(initialRailConfig.homeStation.crs, dests);
+          try {
+            const dests = initialRailConfig.destinations.map((d: any) => ({ name: d.name, crs: d.crs }));
+            const liveRail = await getLiveRailDepartures(initialRailConfig.homeStation.crs, dests);
 
-          const mappedRail: Record<string, TravelDeparture[]> = {};
-          initialRailConfig.destinations.forEach((dest: any) => {
-            // The travelService now returns exact keys matching dest.name
-            mappedRail[dest.id] = liveRail.data[dest.name] || [];
-          });
-          setRailData(mappedRail);
-          setRailDataSource(liveRail.source);
-          setRailLastUpdated(new Date());
+            const mappedRail: Record<string, TravelDeparture[]> = {};
+            initialRailConfig.destinations.forEach((dest: any) => {
+              mappedRail[dest.id] = liveRail.data[dest.name] || [];
+            });
+            setRailData(mappedRail);
+            setRailDataSource(liveRail.source);
+            setRailLastUpdated(new Date());
+          } catch (e) {
+            console.error("Failed to fetch live rail departures", e);
+            railFailed = true;
+            setRailData({});
+          }
 
-          // Fetch Engineering Works
           try {
             const params = new URLSearchParams({ crs: initialRailConfig.homeStation.crs });
             const ops = initialRailConfig.operatorCodes || (initialRailConfig as any).operatorCode;
@@ -162,8 +167,10 @@ export default function App() {
             }
             const engResponse = await axios.get('/api/rail/engineering', { params });
             setEngineeringWorks(engResponse.data.works || []);
+            setEngineeringDataSource(engResponse.data.source || 'scraping');
           } catch (e) {
             console.error("Failed to fetch engineering works", e);
+            setEngineeringWorks([]);
           }
         }
 
@@ -209,7 +216,7 @@ export default function App() {
           }
         }
 
-        setApiError(null);
+        setApiError(railFailed ? "Live rail departures are currently unavailable. Road journeys and maps remain available." : null);
       } catch (error: any) {
         console.error("Failed to fetch initial live data", error);
         setApiError("Live travel data currently unavailable. Check API configuration.");
@@ -246,6 +253,7 @@ export default function App() {
       const engResponse = await axios.get('/api/rail/engineering', { params });
 
       setEngineeringWorks(engResponse.data.works || []);
+      setEngineeringDataSource(engResponse.data.source || 'scraping');
       return true;
     } catch (error) {
       console.error("Rail refresh failed", error);
@@ -347,6 +355,18 @@ export default function App() {
     roadJourneys.find(j => j.id === expandedRoadCardId),
     [expandedRoadCardId, roadJourneys]
   );
+
+  const railSourceSummary = useMemo(() => {
+    if (railDataSource === engineeringDataSource) {
+      return railDataSource === 'api'
+        ? 'Official REST API'
+        : 'Web Scraping';
+    }
+
+    return `Departures: ${railDataSource === 'api' ? 'Official REST API' : 'Web Scraping'} | Engineering Works: ${engineeringDataSource === 'api' ? 'Official REST API' : 'Web Scraping'}`;
+  }, [engineeringDataSource, railDataSource]);
+
+  const railUsesApiOnly = railDataSource === 'api' && engineeringDataSource === 'api';
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -450,7 +470,7 @@ export default function App() {
                 <p className="text-sm text-blue-800">Fetching live road data...</p>
               ) : Object.keys(roadData).length === 0 ? (
                 <p className="text-sm text-blue-800">
-                  {apiError
+                  {googleMapsKeyMissing
                     ? 'Live road status unavailable — Google Maps API key not configured.'
                     : 'Road data unavailable. Try refreshing.'}
                 </p>
@@ -662,35 +682,11 @@ export default function App() {
                 <RefreshCw size={18} className={cn("text-slate-500", isRailRefreshing && "animate-spin")} />
               </button>
               <div className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <span className={cn("w-1.5 h-1.5 rounded-full", railDataSource === 'api' ? "bg-emerald-500" : "bg-amber-500")}></span>
-                Source: {railDataSource === 'api' ? 'Official REST API' : 'Web Scraping'}
+                <span className={cn("w-1.5 h-1.5 rounded-full", railUsesApiOnly ? "bg-emerald-500" : "bg-amber-500")}></span>
+                Source: {railSourceSummary}
               </div>
             </div>
           </div>
-
-          {railDataSource === 'scraping' && (
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl flex gap-3">
-              <Info className="text-blue-500 shrink-0" size={20} />
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-blue-900">Data Source Notice</p>
-                <p className="text-sm text-blue-800 leading-relaxed">
-                  Currently using Web Scraping for live departures because the official REST API token is not configured.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {railDataSource === 'api' && (
-            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex gap-3">
-              <Info className="text-emerald-500 shrink-0" size={20} />
-              <div className="space-y-1">
-                <p className="text-sm font-bold text-emerald-900">Data Source Notice</p>
-                <p className="text-sm text-emerald-800 leading-relaxed">
-                  Using National Rail Official REST API.
-                </p>
-              </div>
-            </div>
-          )}
 
           <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex gap-3">
             <AlertCircle className="text-amber-500 shrink-0" size={20} />
