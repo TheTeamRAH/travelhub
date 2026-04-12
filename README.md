@@ -218,7 +218,7 @@ docker compose up --build -d
 The `Dockerfile` uses a **two-stage build**:
 
 1. **Builder stage** (`node:20-slim`) — installs all dependencies and runs `vite build` to compile the frontend into static assets in `dist/`
-2. **Runtime stage** (`node:20-slim`) — copies only the compiled `dist/`, `node_modules/`, and `server.ts` from the builder. Runs the Express server via `tsx` (TypeScript executor), which serves the pre-built static frontend in production mode
+2. **Runtime stage** (`node:20-slim`) — copies the compiled `dist/`, runtime source files, and installed modules from the builder. Runs the Express server via the `start` script using `tsx`, which serves the pre-built static frontend in production mode
 
 This keeps the final image lean by excluding build-only tooling.
 
