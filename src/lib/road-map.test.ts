@@ -13,6 +13,8 @@ test("builds a server-side static map URL without exposing route addresses", () 
   assert.equal(parsed.hostname, "maps.googleapis.com");
   assert.equal(parsed.pathname, "/maps/api/staticmap");
   assert.equal(parsed.searchParams.get("size"), "640x360");
+  assert.ok(parsed.searchParams.get("center"));
+  assert.ok(parsed.searchParams.get("zoom"));
   assert.match(parsed.searchParams.get("path") || "", /color:0xD97706FF/);
   assert.equal(parsed.searchParams.get("key"), "server-test-key");
   assert.doesNotMatch(url, /origin|destination|address/i);
