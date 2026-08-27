@@ -5,7 +5,7 @@ It also displays road travel times with live traffic, and lets you share routes 
 
 Rail and road journeys are configured in `config/rail.yaml` and `config/roads.yaml` respectively. These files are gitignored and should be populated with your personal travel information (examples are provided).
 
-Live road traffic is provided by Google Maps Routes API. You will need an API key from Google Cloud Console and set it as an environment variable `GOOGLE_MAPS_API_KEY`. The key should have **Routes API** enabled; **Maps Static API** is additionally required for the generated route images; **Distance Matrix API** can remain enabled for the legacy fallback path. Maps Embed API is still useful for the embedded route panels. Travelhub also supplements route results with official National Highways incident feeds so road cards can flag collisions, closures, obstructions, and similar hazards on the monitored roads ahead. If `Routes API` access is denied for the configured key, the app falls back to Google Distance Matrix for travel times and traffic status, but incident matching is unavailable on that fallback path.
+Live road traffic is provided by Google Maps Routes API. You will need an API key from Google Cloud Console and set it as an environment variable `GOOGLE_MAPS_API_KEY`. The key should have **Routes API** enabled; **Maps JavaScript API** is additionally required for the dynamic route maps; **Maps Static API** remains available for generated route images; **Distance Matrix API** can remain enabled for the legacy fallback path. Maps Embed API is still useful for the embedded route panels. Travelhub also supplements route results with official National Highways incident feeds so road cards can flag collisions, closures, obstructions, and similar hazards on the monitored roads ahead. If `Routes API` access is denied for the configured key, the app falls back to Google Distance Matrix for travel times and traffic status, but incident matching is unavailable on that fallback path.
 
 Live rail departures are provided by National Rail when a token is provided via the environment variable `NATIONAL_RAIL_TOKEN`, however this isn't required as the the app will fall back to web scraping. Engineering works can additionally use the National Rail Knowledgebase Incidents feed when `NATIONAL_RAIL_KB_TOKEN` is configured; otherwise they fall back to scraping National Rail’s public disruption pages.
 
@@ -172,7 +172,8 @@ destinations:
 | `NATIONAL_RAIL_TOKEN` | Optional | API key from [Rail Data Marketplace](https://raildata.org.uk). Subscribe to the **"Live Arrival and Departure Boards (Arr and Dep)"** product, then find the key in the subscriber under **"Specificiation"**. Used as the `x-apikey` header. Without this, the app falls back to web scraping. See [docs/raildata-api-examples.md](docs/raildata-api-examples.md) for an example |
 | `NATIONAL_RAIL_KB_TOKEN` | Optional | Knowledgebase auth token for the National Rail `Incidents` feed, used by the engineering works panel to fetch richer planned-engineering data. When absent or invalid, the app falls back to scraping National Rail’s public disruption pages |
 | `NATIONAL_RAIL_KB_BASE_URL` | Optional | Override for the Knowledgebase incidents feed base URL. Defaults to `https://opendata.nationalrail.co.uk/api/staticfeeds` |
-| `GOOGLE_MAPS_API_KEY` | Optional | A Google Cloud API key with **Routes API** and **Maps Static API** enabled for live route data and generated journey images. **Distance Matrix API** is optional for the fallback path. If not set, road travel data is unavailable but the app still works |
+| `GOOGLE_MAPS_API_KEY` | Optional | A server-side Google Cloud API key with **Routes API** and **Maps Static API** enabled for live route data and generated journey images. **Distance Matrix API** is optional for the fallback path. |
+| `GOOGLE_MAPS_BROWSER_API_KEY` | Optional | A separate browser-restricted Google Cloud API key with **Maps JavaScript API** enabled. Required for dynamic route maps; restrict it by HTTP referrer. |
 
 > **Note:** The application works fully without any keys. Rail departures and engineering works both fall back to scraping when their respective National Rail credentials are absent. Road travel shows a clear "API key not configured" message when the Google Maps key is absent. Route incidents currently use official National Highways feeds, so they are strongest for journeys touching the English strategic road network. A key restricted to Distance Matrix only supports the fallback travel-time path; generated route images additionally require **Maps Static API** access.
 
@@ -194,6 +195,7 @@ cd travel-hub
 NATIONAL_RAIL_TOKEN=...
 NATIONAL_RAIL_KB_TOKEN=...
 GOOGLE_MAPS_API_KEY=...
+GOOGLE_MAPS_BROWSER_API_KEY=...
 
 # Set up journey configurations
 cp config/roads.example.yaml config/roads.yaml

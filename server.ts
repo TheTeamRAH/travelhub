@@ -216,6 +216,13 @@ app.get("/api/config/rail", (req, res) => {
   }
 });
 
+// --- Browser Maps Configuration ---
+app.get("/api/config/maps", (_req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_BROWSER_API_KEY?.replace(/^["']|["']$/g, '').trim();
+  if (!apiKey) return res.status(503).json({ error: "Google Maps browser key not configured" });
+  res.json({ apiKey });
+});
+
 // --- Road Journey Config ---
 app.get("/api/config/roads", (req, res) => {
   const configPath = path.resolve(process.cwd(), "config", "roads.yaml");

@@ -24,6 +24,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { getLiveRailDepartures, getLiveRoadTravel, type RoadJourneyData, type TrainDeparture as TravelDeparture } from './services/travelService';
+import GoogleRouteMap from './components/GoogleRouteMap';
 
 // Error Boundary — catches render errors and shows the error message instead of a blank white screen
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
@@ -612,13 +613,11 @@ export default function App() {
                     </div>
 
                     <div className="relative h-[240px] bg-slate-200">
-                    <img
-                      src={live.encodedPolyline
-                        ? `/api/road/map?polyline=${encodeURIComponent(live.encodedPolyline)}&trafficStatus=${encodeURIComponent(live.trafficStatus)}`
-                        : undefined}
-                      alt={`Route map for ${journey.destinationName}`}
-                      className="w-full h-full object-cover"
-                    />
+                      <GoogleRouteMap
+                        encodedPolyline={live.encodedPolyline}
+                        trafficStatus={live.trafficStatus}
+                        title={journey.destinationName}
+                      />
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="bg-white/90 px-4 py-2 rounded-full shadow-xl border border-slate-200 flex items-center gap-2">
                           <MapPin size={16} className="text-red-500" />
