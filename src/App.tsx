@@ -89,6 +89,7 @@ const emptyRoadData: RoadJourneyData = {
   trafficStatus: 'Unavailable',
   distance: '--',
   summary: '--',
+  retrievedAt: '',
   incidents: [],
 };
 
@@ -611,15 +612,13 @@ export default function App() {
                     </div>
 
                     <div className="relative h-[240px] bg-slate-200">
-                      <iframe
-                        width="100%"
-                        height="100%"
-                        style={{ border: 0 }}
-                        src={buildMapsEmbedUrl(journey.origin, journey.destination)}
-                        allowFullScreen
-                        className="w-full h-full pointer-events-none"
-                        title={`Map ${journey.id}`}
-                      ></iframe>
+                    <img
+                      src={live.encodedPolyline
+                        ? `/api/road/map?id=${encodeURIComponent(journey.id)}&polyline=${encodeURIComponent(live.encodedPolyline)}&trafficStatus=${encodeURIComponent(live.trafficStatus)}`
+                        : undefined}
+                      alt={`Route map for ${journey.destinationName}`}
+                      className="w-full h-full object-cover"
+                    />
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="bg-white/90 px-4 py-2 rounded-full shadow-xl border border-slate-200 flex items-center gap-2">
                           <MapPin size={16} className="text-red-500" />
