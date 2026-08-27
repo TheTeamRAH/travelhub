@@ -124,8 +124,8 @@ export default function GoogleRouteMap({ encodedPolyline, trafficStatus, title }
           map,
           path,
           strokeColor: routeColour(trafficStatus),
-          strokeOpacity: 0.85,
-          strokeWeight: 4,
+          strokeOpacity: 0.65,
+          strokeWeight: 3,
           clickable: false,
           zIndex: 2,
         });
