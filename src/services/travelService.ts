@@ -16,6 +16,8 @@ export interface RoadJourneyData {
   trafficStatus: string;
   distance: string;
   summary: string;
+  encodedPolyline?: string;
+  retrievedAt: string;
   incidents: Array<{
     id: string;
     source: "national-highways";
