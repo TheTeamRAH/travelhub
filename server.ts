@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import axios from "axios";
 import { createServer as createViteServer } from "vite";
 
 import * as fs from "fs";
@@ -9,6 +10,7 @@ import * as yaml from "js-yaml";
 import { scrapeEngineeringWorks, scrapeRailDepartures } from "./src/lib/rail-scraper";
 import { fetchRailApiDepartures } from "./src/lib/rail-api";
 import { fetchRoadTravelData } from "./src/lib/road-api";
+import { buildStaticMapUrl } from "./src/lib/road-map";
 import { attachJourneyImpacts, RailJourneyReference } from "./src/lib/rail-engineering";
 import { fetchKnowledgebaseEngineeringWorks } from "./src/lib/rail-engineering-api";
 
@@ -258,6 +260,40 @@ app.get("/api/road/travel", async (req, res) => {
     res.json(results);
   } catch (error: any) {
     res.json({ _error: error.message || "Failed to fetch road data" });
+  }
+});
+
+app.get("/api/road/map", async (req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.replace(/^["']|["']$/g, '').trim();
+  const id = String(req.query.id || "journey");
+  const origin = String(req.query.origin || "");
+  const destination = String(req.query.destination || "");
+  const encodedPolyline = String(req.query.polyline || "");
+  const trafficStatus = String(req.query.trafficStatus || "");
+
+  if (!apiKey) return res.status(503).json({ error: "Google Maps API key not configured" });
+  if (!encodedPolyline && (!origin || !destination)) return res.status(400).json({ error: "polyline or origin and destination are required" });
+
+  try {
+    const journey = encodedPolyline
+      ? { encodedPolyline, trafficStatus }
+      : await fetchRoadTravelData([{ id, origin, destination }], apiKey).then(results => Object.values(results)[0]);
+    if (!journey?.encodedPolyline) {
+      return res.status(422).json({ error: "Route geometry was not returned" });
+    }
+
+    const image = await axios.get(buildStaticMapUrl({
+      encodedPolyline: journey.encodedPolyline,
+      apiKey,
+      trafficStatus: journey.trafficStatus,
+    }), { responseType: "arraybuffer", timeout: 10000 });
+
+    res.setHeader("Content-Type", image.headers["content-type"] || "image/png");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(image.data);
+  } catch (error: any) {
+    console.error("Failed to render road map image:", error.message);
+    return res.status(502).json({ error: "Failed to render road map image" });
   }
 });
 
