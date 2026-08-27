@@ -614,7 +614,7 @@ export default function App() {
                     <div className="relative h-[240px] bg-slate-200">
                     <img
                       src={live.encodedPolyline
-                        ? `/api/road/map?id=${encodeURIComponent(journey.id)}&polyline=${encodeURIComponent(live.encodedPolyline)}&trafficStatus=${encodeURIComponent(live.trafficStatus)}`
+                        ? `/api/road/map?polyline=${encodeURIComponent(live.encodedPolyline)}&trafficStatus=${encodeURIComponent(live.trafficStatus)}`
                         : undefined}
                       alt={`Route map for ${journey.destinationName}`}
                       className="w-full h-full object-cover"
