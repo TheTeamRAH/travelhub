@@ -31,7 +31,7 @@ Journeys must remain separate. One alternative route must not hide an impact on 
 1. Extend the existing server-side Google Routes API response with the minimum route geometry needed for visualisation.
 2. Preserve current travel-time, distance, traffic-status and incident behavior unless the new contract requires a compatible shape.
 3. Introduce a typed, serialisable route-snapshot contract with stable journey ID, retrieval time, source status, route geometry, traffic intervals, impacts, confidence and errors.
-4. Add a browser rendering path that can display route geometry, traffic severity, incident markers, a legend and freshness/source labels.
+4. Add a browser rendering path using Maps JavaScript API that consumes the server-returned route geometry without another Routes API call.
 5. Add a server-side static-image output suitable for manual Slack attachment, subject to Google Maps Platform attribution, quota, billing and terms review.
 6. Add fixture-based contract and rendering tests without using real addresses or API credentials.
 7. Document the feature and safe configuration in the README.
@@ -102,10 +102,12 @@ The exact field names may change during implementation, but the separation betwe
 
 ### Rendering
 
-- Interactive browser view: use the returned geometry to draw the route and distinguish normal, slow and traffic-jam segments where the API response supports the required indexes.
-- Static Slack image: render a stable image with journey title, route, legend, retrieval time, traffic status and separate impact markers or numbered impact list.
-- Accessibility: send a concise text summary with the image; do not make the image the only representation of status.
-- Fallback: if segment-level styling is not viable in the first implementation, render the whole route plus a clearly labelled traffic summary and impact list rather than implying false segment precision.
+- Primary browser view: use the Google Maps JavaScript API with a browser-restricted key to render the server-computed route on a normal Google map. Reuse the encoded polyline returned by the server; do not call Routes API again from the browser.
+- Draw only the selected/configured journey. Do not show Google-generated alternatives unless explicitly requested.
+- Use a modest route stroke, Google map labels, start/end markers and separate impact markers. Traffic colouring should be added only when route interval geometry is available; otherwise show the overall traffic status separately.
+- Static Maps remains a fallback/manual export path, not the primary visual product.
+- Slack delivery remains manual until the dynamic rendering is validated; provide a text summary alongside any image or link.
+- Accessibility: display journey title, retrieval time, source labels, confidence and stale/unavailable state outside the map canvas.
 
 ## Acceptance criteria
 
@@ -137,6 +139,7 @@ The exact field names may change during implementation, but the separation betwe
 ## Compatibility and safety
 
 - Keep `GOOGLE_MAPS_API_KEY` server-side and continue loading it only from the environment.
+- Use a separate `GOOGLE_MAPS_BROWSER_API_KEY` restricted by HTTP referrer for Maps JavaScript API; never expose the server key to the browser.
 - Do not read or commit `.env`, private `config/roads.yaml`, raw addresses or live API responses.
 - Maintain the project’s stated target of staying within 50% of the monthly free-tier allowance; measure route and image requests separately.
 - Cache route snapshots and avoid making each image request trigger an upstream route call.
