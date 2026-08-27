@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import axios from "axios";
+import crypto from "node:crypto";
 import { createServer as createViteServer } from "vite";
 
 import * as fs from "fs";
@@ -263,34 +264,46 @@ app.get("/api/road/travel", async (req, res) => {
   }
 });
 
+const staticMapCache = new Map<string, { contentType: string; data: Buffer }>();
+const MAX_STATIC_MAP_CACHE_ENTRIES = 32;
+
 app.get("/api/road/map", async (req, res) => {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY?.replace(/^["']|["']$/g, '').trim();
-  const id = String(req.query.id || "journey");
-  const origin = String(req.query.origin || "");
-  const destination = String(req.query.destination || "");
   const encodedPolyline = String(req.query.polyline || "");
   const trafficStatus = String(req.query.trafficStatus || "");
 
   if (!apiKey) return res.status(503).json({ error: "Google Maps API key not configured" });
-  if (!encodedPolyline && (!origin || !destination)) return res.status(400).json({ error: "polyline or origin and destination are required" });
+  if (!encodedPolyline || encodedPolyline.length > 10000) {
+    return res.status(400).json({ error: "A valid route polyline is required" });
+  }
+
+  const cacheKey = crypto.createHash("sha256")
+    .update(`${encodedPolyline}|${trafficStatus}`)
+    .digest("hex");
+  const cached = staticMapCache.get(cacheKey);
+  if (cached) {
+    res.setHeader("Content-Type", cached.contentType);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(cached.data);
+  }
 
   try {
-    const journey = encodedPolyline
-      ? { encodedPolyline, trafficStatus }
-      : await fetchRoadTravelData([{ id, origin, destination }], apiKey).then(results => Object.values(results)[0]);
-    if (!journey?.encodedPolyline) {
-      return res.status(422).json({ error: "Route geometry was not returned" });
-    }
-
     const image = await axios.get(buildStaticMapUrl({
-      encodedPolyline: journey.encodedPolyline,
+      encodedPolyline,
       apiKey,
-      trafficStatus: journey.trafficStatus,
+      trafficStatus,
     }), { responseType: "arraybuffer", timeout: 10000 });
+    const data = Buffer.from(image.data);
+    const contentType = image.headers["content-type"] || "image/png";
 
-    res.setHeader("Content-Type", image.headers["content-type"] || "image/png");
+    if (staticMapCache.size >= MAX_STATIC_MAP_CACHE_ENTRIES) {
+      staticMapCache.delete(staticMapCache.keys().next().value as string);
+    }
+    staticMapCache.set(cacheKey, { contentType, data });
+
+    res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "private, max-age=300");
-    return res.send(image.data);
+    return res.send(data);
   } catch (error: any) {
     console.error("Failed to render road map image:", error.message);
     return res.status(502).json({ error: "Failed to render road map image" });
