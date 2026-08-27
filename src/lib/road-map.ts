@@ -79,7 +79,7 @@ export function buildStaticMapUrl({
     size: `${width}x${height}`,
     scale: "2",
     maptype: "roadmap",
-    path: `weight:6|color:${trafficColour(trafficStatus)}|enc:${encodedPolyline}`,
+    path: `weight:3|color:${trafficColour(trafficStatus)}|enc:${encodedPolyline}`,
     ...(viewport || {}),
     key: apiKey,
   });
