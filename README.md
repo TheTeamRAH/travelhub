@@ -26,7 +26,7 @@ Live rail departures are provided by National Rail when a token is provided via 
 |---|---|
 | 🚂 **Live Rail Departures** | Real-time train times from the National Rail [Rail Data Marketplace](https://raildata.org.uk) JSON API, grouped per destination. Shows best-arriving and next train, ETA, platform, status, and calling points. Falls back to web scraping if no API token is set |
 | 🚗 **Live Road Travel** | Google Maps Routes API — live travel time, traffic-aware route summaries, and route-matched incidents per journey |
-| 🗺️ **Impacted Journey Images** | Server-rendered Google Static Maps route images with traffic colouring, suitable for manual Slack attachment; automatic Slack posting is not included |
+| 🗺️ **Impacted Journey Maps** | On-demand Google Maps JavaScript route maps with traffic-aware rendering, suitable for manual inspection and later Slack capture; automatic Slack posting is not included |
 | 🛠️ **Engineering Works** | Planned disruptions only when they match one of your configured rail journeys, including likely intermediate stations inferred from live departures. Uses the National Rail Knowledgebase Incidents feed when available, otherwise falls back to National Rail website scraping |
 | 📱 **Send to Device** | QR code modal + copy-link button to easily open a route on your phone |
 | 🗺️ **Embedded Maps** | Google Maps embedded per route with single-click full-screen expansion |

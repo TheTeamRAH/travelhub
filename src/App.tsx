@@ -614,9 +614,11 @@ export default function App() {
 
                     <div className="relative h-[240px] bg-slate-200">
                       <GoogleRouteMap
-                        encodedPolyline={live.encodedPolyline}
+                        origin={journey.origin}
+                        destination={journey.destination}
                         trafficStatus={live.trafficStatus}
                         title={journey.destinationName}
+                        enabled={false}
                       />
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="bg-white/90 px-4 py-2 rounded-full shadow-xl border border-slate-200 flex items-center gap-2">
@@ -704,22 +706,12 @@ export default function App() {
                   </div>
 
                   <div className="flex-1 relative bg-slate-100 overflow-hidden">
-                    <iframe
-                      width="100%"
-                      height="100%"
-                      src={buildMapsEmbedUrl(
-                        expandedJourney.origin,
-                        expandedJourney.destination,
-                        getExpandedMapZoom(roadData[expandedRoadCardId]?.distance)
-                      )}
-                      allowFullScreen
-                      className="absolute inset-y-0 h-full"
-                      style={{
-                        border: 0,
-                        ...getExpandedMapFrameStyle(roadData[expandedRoadCardId]?.distance),
-                      }}
-                      title="Google Maps Route Expanded"
-                    ></iframe>
+                    <GoogleRouteMap
+                      origin={expandedJourney.origin}
+                      destination={expandedJourney.destination}
+                      trafficStatus={roadData[expandedRoadCardId]?.trafficStatus ?? 'Unavailable'}
+                      title={expandedJourney.destinationName}
+                    />
 
                     <div className="absolute right-6 bottom-28 w-[21rem] max-w-[calc(100%-3rem)] md:w-[22rem]">
                       <div className="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-xl border border-slate-100">

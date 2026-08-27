@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 
 interface GoogleRouteMapProps {
-  encodedPolyline?: string;
+  origin: string;
+  destination: string;
   trafficStatus: string;
   title: string;
+  enabled?: boolean;
 }
 
 type GoogleMapsApi = {
   maps: {
+    importLibrary: (name: string) => Promise<any>;
     Map: new (element: HTMLElement, options: Record<string, unknown>) => any;
-    Polyline: new (options: Record<string, unknown>) => any;
     LatLngBounds: new () => any;
     LatLng: new (lat: number, lng: number) => any;
     Marker: new (options: Record<string, unknown>) => any;
@@ -57,60 +59,35 @@ function loadGoogleMaps(): Promise<GoogleMapsApi> {
   return mapsPromise;
 }
 
-function decodePolyline(encoded: string): Array<[number, number]> {
-  const points: Array<[number, number]> = [];
-  let index = 0;
-  let latitude = 0;
-  let longitude = 0;
-
-  while (index < encoded.length) {
-    let result = 0;
-    let shift = 0;
-    let byte: number;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index <= encoded.length);
-    latitude += (result & 1) ? ~(result >> 1) : result >> 1;
-
-    result = 0;
-    shift = 0;
-    do {
-      byte = encoded.charCodeAt(index++) - 63;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20 && index <= encoded.length);
-    longitude += (result & 1) ? ~(result >> 1) : result >> 1;
-    points.push([latitude / 1e5, longitude / 1e5]);
-  }
-
-  return points;
-}
-
 function routeColour(status: string): string {
   if (status === "Severe delays") return "#dc2626";
   if (status === "Delays building") return "#d97706";
   return "#2563eb";
 }
 
-export default function GoogleRouteMap({ encodedPolyline, trafficStatus, title }: GoogleRouteMapProps) {
+export default function GoogleRouteMap({ origin, destination, trafficStatus, title, enabled = true }: GoogleRouteMapProps) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!mapElement.current || !encodedPolyline) return;
+    if (!enabled || !mapElement.current) return;
     let cancelled = false;
 
     loadGoogleMaps()
-      .then(google => {
+      .then(async google => {
         if (cancelled || !mapElement.current) return;
-        const points = decodePolyline(encodedPolyline);
-        if (points.length < 2) throw new Error("Route geometry is invalid");
+        const { Route } = await google.maps.importLibrary("routes");
+        const { routes } = await Route.computeRoutes({
+          origin,
+          destination,
+          travelMode: "DRIVING",
+          routingPreference: "TRAFFIC_AWARE",
+          extraComputations: ["TRAFFIC_ON_POLYLINE"],
+          fields: ["path", "speedPaths", "routeLabels", "viewport"],
+        });
+        if (cancelled || !routes?.[0] || !mapElement.current) throw new Error("Google returned no route");
 
-        const path = points.map(([lat, lng]) => new google.maps.LatLng(lat, lng));
-        const bounds = new google.maps.LatLngBounds();
-        path.forEach(point => bounds.extend(point));
+        const route = routes[0];
         const map = new google.maps.Map(mapElement.current, {
           mapTypeControl: false,
           streetViewControl: false,
@@ -118,30 +95,27 @@ export default function GoogleRouteMap({ encodedPolyline, trafficStatus, title }
           clickableIcons: false,
           gestureHandling: "cooperative",
         });
-        map.fitBounds(bounds, 32);
-
-        new google.maps.Polyline({
-          map,
-          path,
-          strokeColor: routeColour(trafficStatus),
-          strokeOpacity: 0.65,
-          strokeWeight: 3,
-          clickable: false,
-          zIndex: 2,
+        if (route.viewport) map.fitBounds(route.viewport, 32);
+        route.createPolylines({
+          polylineOptions: {
+            map,
+            strokeColor: routeColour(trafficStatus),
+            strokeOpacity: 0.8,
+            strokeWeight: 4,
+            zIndex: 2,
+          },
         });
-
-        new google.maps.Marker({ position: path[0], map, title: `${title} origin`, label: "A" });
-        new google.maps.Marker({ position: path[path.length - 1], map, title: `${title} destination`, label: "B" });
+        await route.createWaypointAdvancedMarkers({ map });
       })
       .catch(reason => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Google Maps failed to load");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Google Maps route failed");
       });
 
     return () => { cancelled = true; };
-  }, [encodedPolyline, title, trafficStatus]);
+  }, [destination, enabled, origin, title, trafficStatus]);
 
-  if (!encodedPolyline) {
-    return <div className="h-full flex items-center justify-center text-sm text-slate-500">Route map unavailable</div>;
+  if (!enabled) {
+    return <div className="h-full flex items-center justify-center text-sm text-slate-500">Open the route to load the Google map</div>;
   }
 
   return (
