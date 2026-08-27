@@ -11,6 +11,10 @@ Live rail departures are provided by National Rail when a token is provided via 
 
 **Current Status:** This project has been built with Antigravity and is a work inprogress
 
+## Planned feature specifications
+
+- [Impacted journey maps](docs/features/2026-08-27-14-55-impacted-journey-maps.md) — specification for route-specific traffic and incident visualisation, including a manual Slack-ready image output. Implementation has not started; this specification is submitted for review first.
+
 ![Frontend Preview](static/example_frontend.png)
 
 
