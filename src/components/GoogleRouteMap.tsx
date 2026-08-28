@@ -59,6 +59,30 @@ function loadGoogleMaps(): Promise<GoogleMapsApi> {
   return mapsPromise;
 }
 
+function buildEmbedUrl(origin: string, destination: string): string {
+  const url = new URL("https://maps.google.com/maps");
+  url.searchParams.set("saddr", origin);
+  url.searchParams.set("daddr", destination);
+  url.searchParams.set("ie", "UTF8");
+  url.searchParams.set("iwloc", "");
+  url.searchParams.set("output", "embed");
+  return url.toString();
+}
+
+function EmbedMap({ origin, destination, title }: Pick<GoogleRouteMapProps, "origin" | "destination" | "title">) {
+  return (
+    <iframe
+      width="100%"
+      height="100%"
+      style={{ border: 0 }}
+      src={buildEmbedUrl(origin, destination)}
+      allowFullScreen
+      className="h-full w-full"
+      title={`Google Maps route for ${title}`}
+    />
+  );
+}
+
 export default function GoogleRouteMap({ origin, destination, trafficStatus, title, enabled = true }: GoogleRouteMapProps) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,8 +129,8 @@ export default function GoogleRouteMap({ origin, destination, trafficStatus, tit
     return () => { cancelled = true; };
   }, [destination, enabled, origin, title, trafficStatus]);
 
-  if (!enabled) {
-    return <div className="h-full flex items-center justify-center text-sm text-slate-500">Open the route to load the Google map</div>;
+  if (!enabled || error) {
+    return <EmbedMap origin={origin} destination={destination} title={title} />;
   }
 
   return (
