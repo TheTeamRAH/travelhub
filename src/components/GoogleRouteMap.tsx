@@ -69,7 +69,7 @@ function buildEmbedUrl(origin: string, destination: string): string {
   return url.toString();
 }
 
-function EmbedMap({ origin, destination, title }: Pick<GoogleRouteMapProps, "origin" | "destination" | "title">) {
+function EmbedMap({ origin, destination, title, interactive = true }: Pick<GoogleRouteMapProps, "origin" | "destination" | "title"> & { interactive?: boolean }) {
   return (
     <iframe
       width="100%"
@@ -77,7 +77,7 @@ function EmbedMap({ origin, destination, title }: Pick<GoogleRouteMapProps, "ori
       style={{ border: 0 }}
       src={buildEmbedUrl(origin, destination)}
       allowFullScreen
-      className="h-full w-full"
+      className={`h-full w-full ${interactive ? '' : 'pointer-events-none'}`}
       title={`Google Maps route for ${title}`}
     />
   );
@@ -130,7 +130,7 @@ export default function GoogleRouteMap({ origin, destination, trafficStatus, tit
   }, [destination, enabled, origin, title, trafficStatus]);
 
   if (!enabled || error) {
-    return <EmbedMap origin={origin} destination={destination} title={title} />;
+    return <EmbedMap origin={origin} destination={destination} title={title} interactive={enabled} />;
   }
 
   return (
