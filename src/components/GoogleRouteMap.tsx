@@ -59,12 +59,6 @@ function loadGoogleMaps(): Promise<GoogleMapsApi> {
   return mapsPromise;
 }
 
-function routeColour(status: string): string {
-  if (status === "Severe delays") return "#dc2626";
-  if (status === "Delays building") return "#d97706";
-  return "#2563eb";
-}
-
 export default function GoogleRouteMap({ origin, destination, trafficStatus, title, enabled = true }: GoogleRouteMapProps) {
   const mapElement = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,9 +93,6 @@ export default function GoogleRouteMap({ origin, destination, trafficStatus, tit
         route.createPolylines({
           polylineOptions: {
             map,
-            strokeColor: routeColour(trafficStatus),
-            strokeOpacity: 0.8,
-            strokeWeight: 4,
             zIndex: 2,
           },
         });
