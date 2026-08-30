@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import axios from "axios";
+import crypto from "node:crypto";
 import { createServer as createViteServer } from "vite";
 
 import * as fs from "fs";
@@ -9,6 +11,7 @@ import * as yaml from "js-yaml";
 import { scrapeEngineeringWorks, scrapeRailDepartures } from "./src/lib/rail-scraper";
 import { fetchRailApiDepartures } from "./src/lib/rail-api";
 import { fetchRoadTravelData } from "./src/lib/road-api";
+import { buildStaticMapUrl } from "./src/lib/road-map";
 import { attachJourneyImpacts, RailJourneyReference } from "./src/lib/rail-engineering";
 import { fetchKnowledgebaseEngineeringWorks } from "./src/lib/rail-engineering-api";
 
@@ -213,6 +216,13 @@ app.get("/api/config/rail", (req, res) => {
   }
 });
 
+// --- Browser Maps Configuration ---
+app.get("/api/config/maps", (_req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_BROWSER_API_KEY?.replace(/^["']|["']$/g, '').trim();
+  if (!apiKey) return res.status(503).json({ error: "Google Maps browser key not configured" });
+  res.json({ apiKey });
+});
+
 // --- Road Journey Config ---
 app.get("/api/config/roads", (req, res) => {
   const configPath = path.resolve(process.cwd(), "config", "roads.yaml");
@@ -258,6 +268,52 @@ app.get("/api/road/travel", async (req, res) => {
     res.json(results);
   } catch (error: any) {
     res.json({ _error: error.message || "Failed to fetch road data" });
+  }
+});
+
+const staticMapCache = new Map<string, { contentType: string; data: Buffer }>();
+const MAX_STATIC_MAP_CACHE_ENTRIES = 32;
+
+app.get("/api/road/map", async (req, res) => {
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.replace(/^["']|["']$/g, '').trim();
+  const encodedPolyline = String(req.query.polyline || "");
+  const trafficStatus = String(req.query.trafficStatus || "");
+
+  if (!apiKey) return res.status(503).json({ error: "Google Maps API key not configured" });
+  if (!encodedPolyline || encodedPolyline.length > 10000) {
+    return res.status(400).json({ error: "A valid route polyline is required" });
+  }
+
+  const cacheKey = crypto.createHash("sha256")
+    .update(`${encodedPolyline}|${trafficStatus}`)
+    .digest("hex");
+  const cached = staticMapCache.get(cacheKey);
+  if (cached) {
+    res.setHeader("Content-Type", cached.contentType);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(cached.data);
+  }
+
+  try {
+    const image = await axios.get(buildStaticMapUrl({
+      encodedPolyline,
+      apiKey,
+      trafficStatus,
+    }), { responseType: "arraybuffer", timeout: 10000 });
+    const data = Buffer.from(image.data);
+    const contentType = image.headers["content-type"] || "image/png";
+
+    if (staticMapCache.size >= MAX_STATIC_MAP_CACHE_ENTRIES) {
+      staticMapCache.delete(staticMapCache.keys().next().value as string);
+    }
+    staticMapCache.set(cacheKey, { contentType, data });
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    return res.send(data);
+  } catch (error: any) {
+    console.error("Failed to render road map image:", error.message);
+    return res.status(502).json({ error: "Failed to render road map image" });
   }
 });
 

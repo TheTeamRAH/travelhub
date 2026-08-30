@@ -13,6 +13,9 @@ interface GoogleRouteResponse {
     staticDuration?: string;
     distanceMeters?: number;
     description?: string;
+    polyline?: {
+      encodedPolyline?: string;
+    };
     travelAdvisory?: {
       speedReadingIntervals?: Array<{
         speed?: string;
@@ -34,6 +37,8 @@ export interface RoadJourneyData {
   trafficStatus: string;
   distance: string;
   summary: string;
+  encodedPolyline?: string;
+  retrievedAt: string;
   incidents: RoadIncident[];
 }
 
@@ -122,7 +127,8 @@ async function fetchRouteForJourney(journey: RoadJourneyRequest, apiKey: string)
       destination: { address: journey.destination },
       travelMode: "DRIVE",
       routingPreference: "TRAFFIC_AWARE",
-      departureTime: new Date().toISOString(),
+      extraComputations: ["TRAFFIC_ON_POLYLINE"],
+      departureTime: new Date(Date.now() + 60_000).toISOString(),
       languageCode: "en-GB",
       units: "IMPERIAL",
     },
@@ -134,6 +140,7 @@ async function fetchRouteForJourney(journey: RoadJourneyRequest, apiKey: string)
           "routes.staticDuration",
           "routes.distanceMeters",
           "routes.description",
+          "routes.polyline.encodedPolyline",
           "routes.travelAdvisory.speedReadingIntervals.speed",
           "routes.legs.steps.distanceMeters",
           "routes.legs.steps.navigationInstruction.instructions",
@@ -173,6 +180,8 @@ async function fetchRouteForJourney(journey: RoadJourneyRequest, apiKey: string)
     ),
     distance: formatDistance(route.distanceMeters),
     summary,
+    encodedPolyline: route.polyline?.encodedPolyline,
+    retrievedAt: new Date().toISOString(),
     incidents,
   };
 }
@@ -217,6 +226,7 @@ async function fetchRoadTravelDataViaDistanceMatrix(
       trafficStatus: deriveTrafficStatusFromMatrix(durationSeconds, trafficDurationSeconds),
       distance: element.distance?.text || "--",
       summary: "Via main route",
+      retrievedAt: new Date().toISOString(),
       incidents: [],
     };
   });
